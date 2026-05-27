@@ -1,12 +1,12 @@
 <template>
   <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
     <div class="px-5 py-3 border-b border-gray-800 flex items-center justify-between">
-      <h3 class="text-sm font-semibold text-gray-300">📄 Analysis Report</h3>
+      <h3 class="text-sm font-semibold text-gray-300">{{ t('report.title') }}</h3>
       <button
         @click="copyToClipboard"
         class="text-xs text-gray-500 hover:text-gray-300 transition-colors px-2 py-1 rounded hover:bg-gray-800"
       >
-        {{ copied ? '✓ Copied' : 'Copy' }}
+        {{ copied ? t('report.copied') : t('report.copy') }}
       </button>
     </div>
     <div
@@ -18,7 +18,9 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useMarkdown } from '@/composables/useMarkdown'
+const { t } = useI18n()
 
 const props = defineProps<{ markdown: string }>()
 

@@ -3,10 +3,10 @@
     <h3 class="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
       <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse" v-if="isRunning"></span>
       <span class="w-2 h-2 rounded-full bg-gray-500" v-else></span>
-      Agent Execution
+      {{ t('agent.title') }}
     </h3>
     <div v-if="steps.length === 0" class="text-sm text-gray-600 italic py-2">
-      Waiting for agent to start...
+      {{ t('agent.waiting') }}
     </div>
     <div class="space-y-2">
       <div
@@ -34,6 +34,9 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
+
 interface StepEntry {
   node_name: string
   status: 'started' | 'completed' | 'failed'

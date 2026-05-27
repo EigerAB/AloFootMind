@@ -2,13 +2,13 @@
   <div class="p-6 max-w-5xl mx-auto">
     <!-- Back -->
     <RouterLink to="/matches" class="text-sm text-gray-500 hover:text-gray-300 flex items-center gap-1 mb-5">
-      ← Back to Matches
+      {{ t('matchDetail.backToMatches') }}
     </RouterLink>
 
     <!-- Loading state -->
     <div v-if="loading" class="text-center py-16 text-gray-500">
       <div class="text-3xl animate-spin inline-block">⚽</div>
-      <p class="mt-2">Loading match...</p>
+      <p class="mt-2">{{ t('matchDetail.loading') }}</p>
     </div>
 
     <template v-else-if="match">
@@ -18,7 +18,7 @@
         <div class="flex items-center justify-between gap-6">
           <div class="flex-1">
             <div class="text-xl font-bold text-white">{{ match.home_team_name }}</div>
-            <div class="text-xs text-gray-500 mt-1">{{ match.home_manager ?? 'Manager N/A' }}</div>
+            <div class="text-xs text-gray-500 mt-1">{{ match.home_manager ?? t('matchDetail.managerNA') }}</div>
             <div class="text-sm text-gray-500 mt-1">Formation {{ match.home_formation ?? '—' }}</div>
           </div>
           <div class="shrink-0">
@@ -30,7 +30,7 @@
           </div>
           <div class="flex-1 text-right">
             <div class="text-xl font-bold text-white">{{ match.away_team_name }}</div>
-            <div class="text-xs text-gray-500 mt-1">{{ match.away_manager ?? 'Manager N/A' }}</div>
+            <div class="text-xs text-gray-500 mt-1">{{ match.away_manager ?? t('matchDetail.managerNA') }}</div>
             <div class="text-sm text-gray-500 mt-1">Formation {{ match.away_formation ?? '—' }}</div>
           </div>
         </div>
@@ -38,15 +38,15 @@
 
       <!-- Stats grid -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <StatCard label="Shots" :home="match.home_shots" :away="match.away_shots" />
-        <StatCard label="On Target" :home="match.home_shots_on_target" :away="match.away_shots_on_target" />
-        <StatCard label="Passes" :home="match.home_passes" :away="match.away_passes" />
-        <StatCard label="Fouls" :home="match.home_fouls" :away="match.away_fouls" />
+        <StatCard :label="t('matchDetail.stats.shots')" :home="match.home_shots" :away="match.away_shots" />
+        <StatCard :label="t('matchDetail.stats.onTarget')" :home="match.home_shots_on_target" :away="match.away_shots_on_target" />
+        <StatCard :label="t('matchDetail.stats.passes')" :home="match.home_passes" :away="match.away_passes" />
+        <StatCard :label="t('matchDetail.stats.fouls')" :home="match.home_fouls" :away="match.away_fouls" />
       </div>
 
       <!-- Key Events -->
       <div v-if="match.key_events?.length" class="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-6">
-        <h3 class="text-sm font-semibold text-gray-300 mb-3">Key Events</h3>
+        <h3 class="text-sm font-semibold text-gray-300 mb-3">{{ t('matchDetail.keyEvents') }}</h3>
         <div class="space-y-1.5">
           <div
             v-for="(ev, i) in match.key_events"
@@ -71,7 +71,7 @@
           :disabled="analyzing"
           class="w-full py-3 bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white font-semibold rounded-xl transition-colors"
         >
-          {{ analyzing ? 'Starting Analysis...' : '🤖 Analyze This Match' }}
+          {{ analyzing ? t('matchDetail.analyzing') : t('matchDetail.analyzeBtn') }}
         </button>
       </div>
 
@@ -81,7 +81,7 @@
 
       <!-- Lineups -->
       <div v-if="match.lineups?.length" class="mt-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
-        <h3 class="text-sm font-semibold text-gray-300 mb-3">Lineups</h3>
+        <h3 class="text-sm font-semibold text-gray-300 mb-3">{{ t('matchDetail.lineups') }}</h3>
         <div class="grid md:grid-cols-2 gap-4">
           <div v-for="teamId in [match.home_team_id, match.away_team_id]" :key="teamId">
             <div class="text-xs font-semibold text-gray-500 mb-2">
@@ -108,10 +108,13 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { api, type MatchDetail } from '@/api'
 import { useSseStream } from '@/composables/useSseStream'
 import AgentViewer from '@/components/AgentViewer.vue'
 import ReportViewer from '@/components/ReportViewer.vue'
+
+const { t } = useI18n()
 
 const StatCard = {
   props: ['label', 'home', 'away'],

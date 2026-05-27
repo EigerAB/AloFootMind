@@ -1,8 +1,8 @@
 <template>
   <div class="p-6 max-w-6xl mx-auto">
     <div class="mb-6">
-      <h2 class="text-2xl font-bold text-white">Matches</h2>
-      <p class="text-gray-400 text-sm mt-1">Browse StatsBomb historical match data</p>
+      <h2 class="text-2xl font-bold text-white">{{ t('matches.title') }}</h2>
+      <p class="text-gray-400 text-sm mt-1">{{ t('matches.subtitle') }}</p>
     </div>
 
     <!-- Filters -->
@@ -11,7 +11,7 @@
         v-model="selectedCompetitionKey"
         class="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2 focus:ring-1 focus:ring-green-500 focus:outline-none"
       >
-        <option value="">All Competitions</option>
+        <option value="">{{ t('matches.allCompetitions') }}</option>
         <option v-for="c in competitionOptions" :key="c.key" :value="c.key">
           {{ c.label }}
         </option>
@@ -19,21 +19,21 @@
       <input
         v-model="teamFilter"
         @keyup.enter="filterByTeam"
-        placeholder="Filter by team..."
+        :placeholder="t('matches.filterPlaceholder')"
         class="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2 focus:ring-1 focus:ring-green-500 focus:outline-none w-48"
       />
       <button
         @click="loadMatches"
         class="px-4 py-2 bg-green-700 hover:bg-green-600 text-white text-sm rounded-lg transition-colors"
       >
-        Search
+        {{ t('matches.searchBtn') }}
       </button>
     </div>
 
     <!-- Loading -->
     <div v-if="loading" class="text-center py-12 text-gray-500">
       <div class="text-3xl mb-2 animate-spin inline-block">⚽</div>
-      <p>Loading matches...</p>
+      <p>{{ t('matches.loading') }}</p>
     </div>
 
     <!-- Error -->
@@ -84,7 +84,7 @@
       </RouterLink>
 
       <div v-if="matches.length === 0 && !loading" class="text-center py-12 text-gray-600">
-        No matches found. Try adjusting filters.
+        {{ t('matches.noResults') }}
       </div>
     </div>
 
@@ -95,7 +95,7 @@
         :disabled="loadingMore"
         class="px-6 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-lg transition-colors disabled:opacity-50"
       >
-        {{ loadingMore ? 'Loading...' : 'Load More' }}
+        {{ loadingMore ? t('matches.loadingMore') : t('matches.loadMore') }}
       </button>
     </div>
   </div>
@@ -104,7 +104,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { api, type Competition, type Match } from '@/api'
+const { t } = useI18n()
 
 const competitions = ref<Competition[]>([])
 const matches = ref<Match[]>([])

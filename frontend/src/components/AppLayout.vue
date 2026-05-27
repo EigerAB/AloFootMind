@@ -6,7 +6,7 @@
         <h1 class="text-lg font-bold text-white tracking-tight">
           <span class="text-green-400">Alo</span>FootMind
         </h1>
-        <p class="text-xs text-gray-500 mt-0.5">Multi-Agent Football Analysis</p>
+        <p class="text-xs text-gray-500 mt-0.5">{{ t('app.tagline') }}</p>
       </div>
       <nav class="flex flex-col gap-1 p-3 flex-1">
         <RouterLink
@@ -17,11 +17,32 @@
           active-class="bg-green-900/40 text-green-400 font-medium"
         >
           <span class="text-base">{{ link.icon }}</span>
-          {{ link.label }}
+          {{ t(link.labelKey) }}
         </RouterLink>
       </nav>
-      <div class="px-5 py-3 border-t border-gray-800">
-        <p class="text-xs text-gray-600">StatsBomb Open Data</p>
+      <div class="px-5 py-3 border-t border-gray-800 space-y-2">
+        <!-- Language switcher -->
+        <div class="flex items-center gap-1">
+          <button
+            @click="switchLocale('zh')"
+            :class="[
+              'flex-1 py-1 text-xs rounded-md transition-colors',
+              locale === 'zh'
+                ? 'bg-green-800 text-green-200 font-medium'
+                : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'
+            ]"
+          >中文</button>
+          <button
+            @click="switchLocale('en')"
+            :class="[
+              'flex-1 py-1 text-xs rounded-md transition-colors',
+              locale === 'en'
+                ? 'bg-green-800 text-green-200 font-medium'
+                : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'
+            ]"
+          >EN</button>
+        </div>
+        <p class="text-xs text-gray-600">{{ t('app.dataSource') }}</p>
       </div>
     </aside>
 
@@ -30,7 +51,12 @@
       <h1 class="text-base font-bold text-white">
         <span class="text-green-400">Alo</span>FootMind
       </h1>
-      <div class="flex gap-1">
+      <div class="flex items-center gap-2">
+        <!-- Mobile language toggle -->
+        <button
+          @click="switchLocale(locale === 'zh' ? 'en' : 'zh')"
+          class="px-2 py-1 text-xs bg-gray-800 text-gray-400 rounded-md hover:text-white transition-colors"
+        >{{ locale === 'zh' ? 'EN' : '中文' }}</button>
         <RouterLink
           v-for="link in navLinks"
           :key="link.to"
@@ -50,10 +76,18 @@
 
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import { setLocale, type LocaleKey } from '@/i18n'
+
+const { t, locale } = useI18n()
 
 const navLinks = [
-  { to: '/matches', label: 'Matches', icon: '⚽' },
-  { to: '/pre-match', label: 'Pre-Match Intel', icon: '🔍' },
-  { to: '/chat', label: 'AI Chat', icon: '💬' },
+  { to: '/matches', labelKey: 'nav.matches', icon: '⚽' },
+  { to: '/pre-match', labelKey: 'nav.preMatch', icon: '🔍' },
+  { to: '/chat', labelKey: 'nav.chat', icon: '💬' },
 ]
+
+function switchLocale(lang: LocaleKey) {
+  setLocale(lang)
+}
 </script>

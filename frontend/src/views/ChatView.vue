@@ -2,8 +2,8 @@
   <div class="flex flex-col h-screen">
     <!-- Header -->
     <div class="bg-gray-900 border-b border-gray-800 px-6 py-4 shrink-0">
-      <h2 class="text-lg font-bold text-white">AI Football Chat</h2>
-      <p class="text-xs text-gray-500 mt-0.5">Ask anything about matches, tactics, or players</p>
+      <h2 class="text-lg font-bold text-white">{{ t('chat.title') }}</h2>
+      <p class="text-xs text-gray-500 mt-0.5">{{ t('chat.subtitle') }}</p>
     </div>
 
     <!-- Messages -->
@@ -11,13 +11,11 @@
       <!-- Welcome -->
       <div v-if="messages.length === 0" class="text-center py-16">
         <div class="text-5xl mb-4">⚽</div>
-        <h3 class="text-white font-semibold text-lg mb-2">Ask me about football</h3>
-        <p class="text-gray-500 text-sm max-w-sm mx-auto">
-          Ask about match tactics, player profiles, historical results, or team formations from the StatsBomb dataset.
-        </p>
+        <h3 class="text-white font-semibold text-lg mb-2">{{ t('chat.welcomeTitle') }}</h3>
+        <p class="text-gray-500 text-sm max-w-sm mx-auto">{{ t('chat.welcomeDesc') }}</p>
         <div class="mt-6 flex flex-wrap gap-2 justify-center">
           <button
-            v-for="suggestion in suggestions"
+            v-for="suggestion in localeSuggestions"
             :key="suggestion"
             @click="sendMessage(suggestion)"
             class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-400 text-sm rounded-lg transition-colors"
@@ -83,7 +81,7 @@
           v-model="inputText"
           @keydown.enter.prevent="sendMessage()"
           :disabled="isStreaming"
-          placeholder="Ask about tactics, players, or matches..."
+          :placeholder="t('chat.inputPlaceholder')"
           class="flex-1 bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-xl px-4 py-3 focus:ring-1 focus:ring-green-500 focus:outline-none disabled:opacity-50"
         />
         <button
@@ -91,7 +89,7 @@
           :disabled="!inputText.trim() || isStreaming"
           class="px-5 py-3 bg-green-700 hover:bg-green-600 disabled:opacity-40 text-white rounded-xl transition-colors font-medium"
         >
-          Send
+          {{ t('chat.sendBtn') }}
         </button>
       </div>
     </div>
@@ -99,9 +97,12 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useSseStream } from '@/composables/useSseStream'
 import { useMarkdown } from '@/composables/useMarkdown'
+const { t, tm } = useI18n()
+const localeSuggestions = computed(() => tm('chat.suggestions') as string[])
 
 interface Message {
   role: 'user' | 'assistant'
@@ -117,13 +118,6 @@ const messagesContainer = ref<HTMLElement | null>(null)
 
 const { post: postSse } = useSseStream()
 const { render: renderMarkdown } = useMarkdown()
-
-const suggestions = [
-  'What was the top-scoring match?',
-  'Describe Barcelona\'s pressing tactics',
-  'Who scored the most goals in the dataset?',
-  'Compare Liverpool and Manchester City\'s formations',
-]
 
 async function scrollToBottom() {
   await nextTick()
