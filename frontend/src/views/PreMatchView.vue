@@ -137,7 +137,7 @@ async function generateReport() {
         isRunning.value = false
         const result = await api.getTaskStatus(res.task_id)
         if (result.has_result) {
-          const r = await fetch(`/api/tasks/${res.task_id}/result`).then(r => r.json()).catch(() => null)
+          const r = await api.getTaskResult(res.task_id).catch(() => null)
           if (r?.result) report.value = r.result
         }
         stopSse()

@@ -56,6 +56,11 @@ export const api = {
     request<{ task_id: string; status: string; has_result: boolean }>(
       `/api/tasks/${taskId}/status`
     ),
+
+  getTaskResult: (taskId: string) =>
+    request<{ task_id: string; result: string }>(
+      `/api/tasks/${taskId}/result`
+    ),
 }
 
 export interface Competition {

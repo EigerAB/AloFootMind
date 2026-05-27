@@ -187,4 +187,5 @@ async function sendMessage(text?: string) {
     isStreaming.value = false
   }
 }
+
 </script>
