@@ -82,6 +82,43 @@ services:
       timeout: 20s
       retries: 3
 
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: alofootmind_backend
+    env_file: ./backend/.env
+    environment:
+      DB_URL: postgresql+asyncpg://alofootmind:alofootmind@postgres:5432/alofootmind
+      REDIS_URL: redis://redis:6379/0
+      MILVUS_HOST: milvus
+      MILVUS_PORT: "19530"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles:
+      - full
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: alofootmind_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    profiles:
+      - full
+
 volumes:
   postgres_data:
   redis_data:

@@ -78,3 +78,17 @@ dev: up ## Start infrastructure + both dev servers (runs in background)
 	@cd backend && uvicorn app.main:app --reload --port 8000 &
 	@echo "Starting frontend..."
 	@cd frontend && npm run dev
+
+# ─── Production (Docker full-stack) ──────────────────────────────────────────
+
+prod-build: ## Build backend + frontend Docker images
+	docker compose --profile full build
+
+prod-up: ## Start full production stack (infra + backend + frontend)
+	docker compose --profile full up -d
+
+prod-down: ## Stop full production stack
+	docker compose --profile full down
+
+prod-logs: ## Tail production logs
+	docker compose --profile full logs -f backend frontend
