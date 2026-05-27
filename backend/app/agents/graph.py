@@ -10,7 +10,7 @@ from app.agents.state import AnalysisState
 from app.agents.subgraphs.post_match import build_post_match_graph
 from app.agents.subgraphs.pre_match import build_pre_match_graph
 from app.agents.subgraphs.qa import build_qa_graph
-from app.agents.utils import push_step, set_task_status
+from app.agents.utils import push_step, set_task_result, set_task_status
 
 
 _post_match_graph = None
@@ -70,6 +70,9 @@ async def qa_node(state: AnalysisState) -> dict:
 
 
 async def finalize_node(state: AnalysisState) -> dict:
+    report = state.get("report_markdown")
+    if report:
+        await set_task_result(state["task_id"], report)
     await set_task_status(state["task_id"], "completed")
     return {}
 
@@ -109,8 +112,12 @@ def get_main_graph():
 
 async def run_analysis(initial_state: dict) -> AnalysisState:
     """Entry point for triggering an analysis task."""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    task_id = initial_state.get("task_id", str(uuid.uuid4()))
     state = AnalysisState(
-        task_id=initial_state.get("task_id", str(uuid.uuid4())),
+        task_id=task_id,
         request_type=initial_state["request_type"],
         match_id=initial_state.get("match_id"),
         team_ids=initial_state.get("team_ids"),
@@ -123,4 +130,9 @@ async def run_analysis(initial_state: dict) -> AnalysisState:
         step_log=[],
         error=None,
     )
-    return await get_main_graph().ainvoke(state)
+    try:
+        return await get_main_graph().ainvoke(state)
+    except Exception as exc:
+        logger.exception(f"[run_analysis] task {task_id} failed: {exc}")
+        await set_task_status(task_id, "failed")
+        raise

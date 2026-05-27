@@ -61,6 +61,16 @@ async def get_task_status(task_id: str):
     }
 
 
+@router.get("/tasks/{task_id}/result")
+async def get_task_result(task_id: str):
+    from fastapi import HTTPException
+    redis = await get_redis()
+    result = await redis.get(f"task:{task_id}:result")
+    if result is None:
+        raise HTTPException(status_code=404, detail="Result not yet available")
+    return {"task_id": task_id, "result": result}
+
+
 async def _sse_generator(task_id: str) -> AsyncGenerator[str, None]:
     """Poll Redis step_log and stream incremental SSE events."""
     redis = await get_redis()
