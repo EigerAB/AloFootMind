@@ -39,6 +39,7 @@ export default {
     analyzeBtn: '🤖 Analyze This Match',
     analyzing: 'Starting Analysis...',
     alreadyDone: 'Report already generated',
+    formation: 'Formation {f}',
     lineups: 'Lineups',
     minute: "{m}'",
   },

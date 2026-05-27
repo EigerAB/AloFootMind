@@ -39,6 +39,7 @@ export default {
     analyzeBtn: '🤖 分析本场比赛',
     analyzing: '启动分析中...',
     alreadyDone: '报告已生成',
+    formation: '阵型 {f}',
     lineups: '首发阵容',
     minute: '{m}分钟',
   },

@@ -19,7 +19,7 @@
           <div class="flex-1">
             <div class="text-xl font-bold text-white">{{ match.home_team_name }}</div>
             <div class="text-xs text-gray-500 mt-1">{{ match.home_manager ?? t('matchDetail.managerNA') }}</div>
-            <div class="text-sm text-gray-500 mt-1">Formation {{ match.home_formation ?? '—' }}</div>
+            <div class="text-sm text-gray-500 mt-1">{{ t('matchDetail.formation', { f: match.home_formation ?? '—' }) }}</div>
           </div>
           <div class="shrink-0">
             <div class="text-5xl font-black text-white font-mono">
@@ -31,7 +31,7 @@
           <div class="flex-1 text-right">
             <div class="text-xl font-bold text-white">{{ match.away_team_name }}</div>
             <div class="text-xs text-gray-500 mt-1">{{ match.away_manager ?? t('matchDetail.managerNA') }}</div>
-            <div class="text-sm text-gray-500 mt-1">Formation {{ match.away_formation ?? '—' }}</div>
+            <div class="text-sm text-gray-500 mt-1">{{ t('matchDetail.formation', { f: match.away_formation ?? '—' }) }}</div>
           </div>
         </div>
       </div>
