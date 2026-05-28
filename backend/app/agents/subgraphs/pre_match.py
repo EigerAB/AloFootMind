@@ -7,6 +7,8 @@ from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph
 
+DEEPSEEK_BASE = "https://api.deepseek.com/v1"
+
 from app.agents.state import AnalysisState
 from app.agents.utils import llm_retry, push_step, set_task_result
 from app.core.config import settings
@@ -15,10 +17,11 @@ from app.services.rag_service import retrieve
 logger = logging.getLogger(__name__)
 
 
-def _gpt4o() -> ChatOpenAI:
+def _deepseek() -> ChatOpenAI:
     return ChatOpenAI(
-        model="gpt-4o",
-        api_key=settings.OPENAI_API_KEY,
+        model="deepseek-chat",
+        api_key=settings.DEEPSEEK_API_KEY,
+        base_url=DEEPSEEK_BASE,
         temperature=0.3,
         max_tokens=2000,
     )
@@ -122,7 +125,7 @@ async def rag_retrieval(state: AnalysisState) -> dict:
 async def _call_matchup_analysis(
     ar: dict, rag_context: list[dict]
 ) -> str:
-    llm = _gpt4o()
+    llm = _deepseek()
     teams = ar.get("teams", {})
     home_id = ar.get("home_id")
     away_id = ar.get("away_id")
