@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from sqlalchemy import text
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -52,4 +53,36 @@ app.include_router(analysis_router)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    from app.db.postgres import AsyncSessionLocal
+    from app.db.redis_client import get_redis
+    from app.db.milvus_client import milvus_client
+
+    checks = {"status": "ok", "services": {}}
+
+    # Postgres
+    try:
+        async with AsyncSessionLocal() as db:
+            await db.execute(text("SELECT 1"))
+        checks["services"]["postgres"] = "ok"
+    except Exception as e:
+        checks["status"] = "degraded"
+        checks["services"]["postgres"] = f"error: {e}"
+
+    # Redis
+    try:
+        redis = await get_redis()
+        await redis.ping()
+        checks["services"]["redis"] = "ok"
+    except Exception as e:
+        checks["status"] = "degraded"
+        checks["services"]["redis"] = f"error: {e}"
+
+    # Milvus
+    try:
+        milvus_client.get_collection("test").description
+        checks["services"]["milvus"] = "ok"
+    except Exception as e:
+        checks["status"] = "degraded"
+        checks["services"]["milvus"] = f"error: {e}"
+
+    return checks

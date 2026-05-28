@@ -43,13 +43,15 @@ def load_lineups(match_id: int) -> list[dict]:
         return json.load(f)
 
 
-def iter_all_matches(competition_id: int | None = None) -> Generator[tuple[dict, dict], None, None]:
-    """Yields (competition_entry, match) for all matches under the given competition_id."""
+def iter_all_matches(competition_id: int | None = None, season_id: int | None = None) -> Generator[tuple[dict, dict], None, None]:
+    """Yields (competition_entry, match) for all matches under the given competition_id and optionally season_id."""
     competitions = load_competitions(competition_id)
     seen_combos: set[tuple[int, int]] = set()
     for comp_entry in competitions:
         cid = comp_entry["competition_id"]
         sid = comp_entry["season_id"]
+        if season_id is not None and sid != season_id:
+            continue
         if (cid, sid) in seen_combos:
             continue
         seen_combos.add((cid, sid))

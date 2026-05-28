@@ -30,7 +30,7 @@ logging.basicConfig(
 logger = logging.getLogger("ingest")
 
 
-async def main(competition_id: int | None, dry_run: bool) -> None:
+async def main(competition_id: int | None, season_id: int | None, dry_run: bool) -> None:
     logger.info("Initialising database...")
     await init_db()
 
@@ -48,7 +48,7 @@ async def main(competition_id: int | None, dry_run: bool) -> None:
     processed_seasons: set[tuple[int, int]] = set()
 
     async with AsyncSessionLocal() as session:
-        for comp_entry, match in iter_all_matches(competition_id):
+        for comp_entry, match in iter_all_matches(competition_id, season_id):
             if dry_run:
                 logger.info(
                     f"[dry-run] Would ingest match_id={match['match_id']} "
@@ -91,9 +91,15 @@ if __name__ == "__main__":
         help="StatsBomb competition_id to ingest (omit for all)",
     )
     parser.add_argument(
+        "--season_id",
+        type=int,
+        default=None,
+        help="StatsBomb season_id to ingest (omit for all seasons in competition)",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Parse only, do not write to any storage",
     )
     args = parser.parse_args()
-    asyncio.run(main(args.competition_id, args.dry_run))
+    asyncio.run(main(args.competition_id, args.season_id, args.dry_run))

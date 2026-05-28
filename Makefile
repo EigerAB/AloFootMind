@@ -46,8 +46,14 @@ build-frontend: ## Build frontend for production
 
 # ─── ETL / Data Ingestion ─────────────────────────────────────────────────────
 
+seed-mock: ## Seed mock data (no StatsBomb needed, for local dev/testing)
+	cd backend && python scripts/seed_mock.py
+
 ingest: ## Run full ETL ingestion (requires STATSBOMB_DATA_PATH in .env)
 	cd backend && python scripts/ingest.py
+
+ingest-season: ## Ingest single season (use: make ingest-season COMPETITION_ID=2 SEASON_ID=44)
+	cd backend && python scripts/ingest.py --competition_id $(COMPETITION_ID) --season_id $(SEASON_ID)
 
 ingest-dry: ## Dry-run ETL (show what would be processed)
 	cd backend && python scripts/ingest.py --dry-run
