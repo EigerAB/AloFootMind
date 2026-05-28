@@ -1,5 +1,184 @@
-# Vue 3 + TypeScript + Vite
+# AloFootMind 前端
 
-This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+基于 Vue 3 + TypeScript + Vite 的足球分析前端应用。
 
-Learn more about the recommended Project Setup and IDE Support in the [Vue Docs TypeScript Guide](https://vuejs.org/guide/typescript/overview.html#project-setup).
+## 功能特性
+
+- **比赛列表**：浏览所有比赛，支持分页
+- **比赛详情**：查看比分、阵容、关键事件、统计数据
+- **赛后分析**：触发 AI 战术分析，实时显示 Agent 执行过程
+- **赛前分析**：球队对阵分析与预测
+- **智能问答**：基于 RAG 的语义搜索问答
+- **多语言**：支持中文/英文切换
+
+## 技术栈
+
+- **框架**：Vue 3.5 + TypeScript
+- **构建工具**：Vite 6
+- **路由**：Vue Router 4
+- **状态管理**：Pinia（可选）
+- **UI 样式**：TailwindCSS 4
+- **国际化**：vue-i18n
+- **Markdown 渲染**：markdown-it
+- **SSE 流式传输**：自定义 composable
+
+## 环境要求
+
+- Node.js 20+
+- npm 或 pnpm
+
+## 快速开始
+
+### 1. 安装依赖
+
+```bash
+npm install
+```
+
+### 2. 开发模式
+
+```bash
+npm run dev
+```
+
+访问 `http://localhost:5173`
+
+### 3. 生产构建
+
+```bash
+npm run build
+```
+
+构建产物输出到 `dist/` 目录
+
+## 项目结构
+
+```
+frontend/
+├── src/
+│   ├── api/
+│   │   └── index.ts          # API 客户端封装
+│   ├── components/
+│   │   ├── AgentViewer.vue   # Agent 执行过程可视化
+│   │   ├── AppLayout.vue     # 应用布局
+│   │   └── ReportViewer.vue  # Markdown 报告渲染
+│   ├── composables/
+│   │   └── useSseStream.ts   # SSE 流式传输 hook
+│   ├── i18n/
+│   │   ├── en.ts             # 英文翻译
+│   │   └── zh.ts             # 中文翻译
+│   ├── router/
+│   │   └── index.ts          # 路由配置
+│   ├── style.css             # 全局样式
+│   ├── App.vue               # 根组件
+│   └── main.ts               # 入口文件
+├── public/
+├── index.html
+├── vite.config.ts
+├── tsconfig.json
+└── package.json
+```
+
+## 页面说明
+
+### 比赛列表 (`/matches`)
+- 显示所有比赛列表
+- 支持分页加载
+- 点击进入比赛详情
+
+### 比赛详情 (`/matches/:id`)
+- 比赛比分、时间、球场信息
+- 双方阵容
+- 关键事件（进球、红黄牌）
+- 统计数据（射门、传球、犯规）
+- 触发赛后分析按钮
+- Agent 执行过程实时展示
+- 分析报告 Markdown 渲染
+
+### 赛前分析 (`/pre-match`)
+- 选择两支球队进行赛前分析
+- 实时显示 Agent 执行过程
+- 展示分析报告
+
+### 智能问答 (`/chat`)
+- 基于比赛数据的语义搜索
+- AI 回答足球相关问题
+
+## API 配置
+
+API 基础路径在 `src/api/index.ts` 中配置：
+
+```typescript
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+```
+
+可通过 `.env` 文件覆盖：
+
+```env
+VITE_API_URL=http://localhost:8000
+```
+
+## 国际化
+
+默认语言：中文
+
+切换语言在 `src/i18n/index.ts` 中配置，支持：
+- `zh` - 中文
+- `en` - 英文
+
+添加新翻译：
+1. 在 `src/i18n/zh.ts` 添加中文键值
+2. 在 `src/i18n/en.ts` 添加英文键值
+3. 在组件中使用 `t('key')` 调用
+
+## 开发
+
+### 代码检查
+
+```bash
+npm run lint
+```
+
+### 类型检查
+
+```bash
+npm run type-check
+```
+
+## Docker 部署
+
+### 构建前端镜像
+
+```bash
+docker build -t alofootmind-frontend .
+```
+
+### 使用 Docker Compose 运行
+
+```bash
+cd ..
+docker compose --profile full up -d
+```
+
+前端通过 Nginx 服务在 `http://localhost`，API 请求代理到后端 `http://localhost:8000`。
+
+## 常见问题
+
+### API 请求失败
+- 确认后端服务运行在 `http://localhost:8000`
+- 检查 CORS 配置是否包含前端 URL
+- 查看浏览器控制台网络请求状态
+
+### SSE 流式连接断开
+- 检查后端 SSE 端点是否正常
+- 确认网络连接稳定
+- 查看浏览器控制台 SSE 错误信息
+
+### 样式不生效
+- 确认 TailwindCSS 配置正确
+- 检查 `style.css` 是否被引入
+- 清除浏览器缓存重试
+
+## 许可证
+
+MIT

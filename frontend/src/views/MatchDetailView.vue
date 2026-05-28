@@ -75,7 +75,10 @@
         </button>
       </div>
 
-      <AgentViewer v-if="stepLog.length || isRunning" :steps="stepLog" :is-running="isRunning" :error="agentError" class="mb-6" />
+      <div v-if="statusMsg" class="mb-4 px-4 py-2 bg-green-900/40 border border-green-700 rounded-lg text-sm text-green-300">
+        {{ statusMsg }}
+      </div>
+      <AgentViewer v-if="stepLog.length || isRunning || agentError" :steps="stepLog" :is-running="isRunning" :error="agentError" class="mb-6" />
 
       <ReportViewer v-if="report" :markdown="report" />
 
@@ -139,6 +142,7 @@ const isRunning = ref(false)
 const stepLog = ref<any[]>([])
 const report = ref<string | null>(null)
 const agentError = ref<string | null>(null)
+const statusMsg = ref<string | null>(null)
 
 const { start: startSse, stop: stopSse } = useSseStream()
 
@@ -161,8 +165,13 @@ async function triggerAnalysis() {
   try {
     const res = await api.triggerAnalysis(Number(route.params.id))
     if (res.status === 'already_done') {
-      const r = await api.getMatchReport(Number(route.params.id))
-      report.value = r.report_markdown
+      const r = await api.getMatchReport(Number(route.params.id)).catch(() => null)
+      if (r) {
+        report.value = r.report_markdown
+        statusMsg.value = t('matchDetail.alreadyDone')
+      } else {
+        agentError.value = t('matchDetail.reportFetchFailed', '报告获取失败，请刷新重试')
+      }
       return
     }
     taskId.value = res.task_id
