@@ -21,11 +21,11 @@ async def upsert_log(session: AsyncSession, match_id: int) -> None:
     """Insert a fresh log row if it doesn't already exist."""
     await session.execute(
         text("""
-            INSERT INTO ingestion_log (match_id)
-            VALUES (:mid)
+            INSERT INTO ingestion_log (match_id, step_parse, step_embed, step_postgres, step_redis_invalidate)
+            VALUES (:mid, :pending, :pending, :pending, :pending)
             ON CONFLICT (match_id) DO NOTHING
         """),
-        {"mid": match_id},
+        {"mid": match_id, "pending": STATUS_PENDING},
     )
     await session.commit()
 
