@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import uuid
 from typing import Literal
+from venv import logger
 
 from langgraph.graph import END, StateGraph
 
@@ -39,14 +40,28 @@ def _get_qa():
     return _qa_graph
 
 
+_SUPERVISOR_MSGS = {
+    "en": {
+        "started": "Routing task type: {request_type}",
+        "completed": "Routing to sub-agent.",
+    },
+    "zh": {
+        "started": "路由任务类型：{request_type}",
+        "completed": "正在调度到子智能体。",
+    },
+}
+
+
 async def supervisor_node(state: AnalysisState) -> dict:
     node = "supervisor"
+    lang = state.get("language", "en")
+    msgs = _SUPERVISOR_MSGS.get(lang, _SUPERVISOR_MSGS["en"])
     step_log = await push_step(
         state, node, "started",
-        f"Routing task type: {state['request_type']}"
+        msgs["started"].format(request_type=state["request_type"])
     )
     await set_task_status(state["task_id"], "running")
-    step_log = await push_step(state, node, "completed", "Routing to sub-graph.")
+    step_log = await push_step(state, node, "completed", msgs["completed"])
     return {"step_log": step_log}
 
 
@@ -129,6 +144,7 @@ async def run_analysis(initial_state: dict) -> AnalysisState:
         report_markdown=None,
         step_log=[],
         error=None,
+        language=initial_state.get("language", "en"),
     )
     try:
         return await get_main_graph().ainvoke(state)

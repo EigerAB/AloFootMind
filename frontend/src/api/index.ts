@@ -35,15 +35,15 @@ export const api = {
 
   getMatch: (id: number) => request<MatchDetail>(`/api/matches/${id}`),
 
-  getMatchReport: (id: number) =>
+  getMatchReport: (id: number, language = 'en') =>
     request<{ match_id: number; report_markdown: string; created_at: string }>(
-      `/api/matches/${id}/report`
+      `/api/matches/${id}/report?language=${language}`
     ),
 
-  triggerAnalysis: (matchId: number) =>
+  triggerAnalysis: (matchId: number, language = 'en') =>
     request<{ match_id: number; task_id: string | null; status: string }>(
       `/api/matches/${matchId}/analyze`,
-      { method: 'POST' }
+      { method: 'POST', body: JSON.stringify({ language }) }
     ),
 
   triggerPreMatch: (homeTeamId: number, awayTeamId: number) =>

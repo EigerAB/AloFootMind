@@ -33,6 +33,7 @@ class AnalysisState(TypedDict):
     report_markdown: str | None
     step_log: list[StepLogEntry]
     error: str | None
+    language: str
 
 
 def make_step_entry(

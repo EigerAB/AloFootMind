@@ -107,9 +107,14 @@ async def get_match(match_id: int, session: AsyncSession = Depends(get_db)):
     return match_data
 
 
+class AnalyzeRequest(BaseModel):
+    language: str = "en"
+
+
 @router.post("/{match_id}/analyze")
 async def trigger_analysis(
     match_id: int,
+    body: AnalyzeRequest,
     background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_db),
 ):
@@ -121,8 +126,8 @@ async def trigger_analysis(
         raise HTTPException(status_code=404, detail="Match not found")
 
     report_row = await session.execute(
-        text("SELECT id FROM analysis_reports WHERE match_id = :mid AND report_type = 'post_match' LIMIT 1"),
-        {"mid": match_id},
+        text("SELECT id FROM analysis_reports WHERE match_id = :mid AND report_type = 'post_match' AND language = :lang LIMIT 1"),
+        {"mid": match_id, "lang": body.language},
     )
     if report_row.scalar_one_or_none():
         return {"match_id": match_id, "status": "already_done", "task_id": None}
@@ -133,21 +138,21 @@ async def trigger_analysis(
 
     background_tasks.add_task(
         run_analysis,
-        {"task_id": task_id, "request_type": "post_match", "match_id": match_id},
+        {"task_id": task_id, "request_type": "post_match", "match_id": match_id, "language": body.language},
     )
     return {"match_id": match_id, "task_id": task_id, "status": "pending"}
 
 
 @router.get("/{match_id}/report")
-async def get_report(match_id: int, session: AsyncSession = Depends(get_db)):
+async def get_report(match_id: int, language: str = "en", session: AsyncSession = Depends(get_db)):
     result = await session.execute(
         text("""
             SELECT report_markdown, created_at
             FROM analysis_reports
-            WHERE match_id = :mid AND report_type = 'post_match'
+            WHERE match_id = :mid AND report_type = 'post_match' AND language = :lang
             ORDER BY created_at DESC LIMIT 1
         """),
-        {"mid": match_id},
+        {"mid": match_id, "lang": language},
     )
     row = result.mappings().first()
     if not row:
