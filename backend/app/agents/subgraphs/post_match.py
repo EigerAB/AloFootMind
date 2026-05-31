@@ -167,7 +167,8 @@ async def _call_tactical_analysis(
                     ## 球员亮点
                     ## 战术总结
 
-                    请具体且具有分析性，仅引用上述数据中的事实。如适用请标注来源编号 [来源 N]
+                    请具体且具有分析性，仅引用上述数据中的事实。如适用请标注来源编号 [来源 N]。
+                    不要包含任何开场白、客套语或免责声明，直接从 ## 比赛概述 开始。
                     """
     else:
         prompt = f"""
@@ -198,6 +199,7 @@ async def _call_tactical_analysis(
                     ## Tactical Verdict
 
                     Be specific and analytical. Only reference facts from the data above. Cite source numbers [Source N] where applicable.
+                    Do NOT include any preamble, greeting, or disclaimer. Start directly with ## Match Overview.
                     """
 
     from langchain_core.messages import HumanMessage
