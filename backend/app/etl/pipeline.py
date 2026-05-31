@@ -43,8 +43,8 @@ async def _write_postgres(session: AsyncSession, parsed: dict) -> None:
     mr = parsed["match_record"]
     await session.execute(
         text("""
-            INSERT INTO competitions (competition_id, competition_name, country_name)
-            VALUES (:cid, :cname, :country)
+            INSERT INTO competitions (competition_id, competition_name, country_name, competition_gender, competition_youth, competition_international)
+            VALUES (:cid, :cname, :country, 'male', false, false)
             ON CONFLICT (competition_id) DO NOTHING
         """),
         {"cid": mr["competition_id"], "cname": mr["competition_name"], "country": mr["country_name"]},
@@ -65,8 +65,8 @@ async def _write_postgres(session: AsyncSession, parsed: dict) -> None:
     ]:
         await session.execute(
             text("""
-                INSERT INTO teams (team_id, team_name)
-                VALUES (:tid, :tname)
+                INSERT INTO teams (team_id, team_name, team_gender)
+                VALUES (:tid, :tname, 'male')
                 ON CONFLICT (team_id) DO NOTHING
             """),
             {"tid": team_id, "tname": team_name},
@@ -251,9 +251,9 @@ async def ingest_match(
 
                 await ilog.mark_step(session, match_id, "step_embed", "done")
         except Exception as e:
+            await session.rollback()
             await ilog.mark_step(session, match_id, "step_embed", "failed", str(e))
             logger.error(f"[ETL] step_embed failed for match_id={match_id}: {e}")
-            return
 
     # ── step_postgres ────────────────────────────────────────────────────────
     if not await ilog.is_step_done(session, match_id, "step_postgres"):
@@ -262,6 +262,7 @@ async def ingest_match(
                 await _write_postgres(session, parsed)
                 await ilog.mark_step(session, match_id, "step_postgres", "done")
         except Exception as e:
+            await session.rollback()
             await ilog.mark_step(session, match_id, "step_postgres", "failed", str(e))
             logger.error(f"[ETL] step_postgres failed for match_id={match_id}: {e}")
             return

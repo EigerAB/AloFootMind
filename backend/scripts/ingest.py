@@ -92,4 +92,5 @@ if __name__ == "__main__":
         help="Parse only, do not write to any storage",
     )
     args = parser.parse_args()
+    logger.info(f"Args: {args}")
     asyncio.run(main(args.competition_id, args.season_id, args.dry_run))
