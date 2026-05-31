@@ -1,7 +1,7 @@
 <template>
-  <div class="flex min-h-screen bg-gray-950 text-gray-100">
+  <div class="flex h-screen overflow-hidden bg-gray-950 text-gray-100">
     <!-- Sidebar -->
-    <aside class="hidden md:flex flex-col w-56 bg-gray-900 border-r border-gray-800 shrink-0">
+    <aside class="hidden md:flex flex-col w-56 bg-gray-900 border-r border-gray-800 shrink-0 h-full">
       <div class="px-5 py-4 border-b border-gray-800">
         <h1 class="text-lg font-bold text-white tracking-tight">
           <span class="text-green-400">Alo</span>FootMind
@@ -68,7 +68,7 @@
     </div>
 
     <!-- Main content -->
-    <main class="flex-1 min-w-0 md:pt-0 pt-14">
+    <main class="flex-1 min-w-0 overflow-y-auto md:pt-0 pt-14">
       <slot />
     </main>
   </div>
