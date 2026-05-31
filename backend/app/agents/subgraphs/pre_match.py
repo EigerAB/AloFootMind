@@ -16,6 +16,56 @@ from app.services.rag_service import retrieve
 
 logger = logging.getLogger(__name__)
 
+_STEP_MSGS: dict[str, dict[str, dict[str, str]]] = {
+    "fetch_team_history": {
+        "en": {
+            "started": "Loading team historical data...",
+            "completed": "Found {n} head-to-head matches for {home} vs {away}.",
+            "failed": "Need 2 team IDs.",
+        },
+        "zh": {
+            "started": "正在加载球队历史数据...",
+            "completed": "找到 {n} 场 {home} vs {away} 的两队相遇记录。",
+            "failed": "需要 2 个球队 ID。",
+        },
+    },
+    "rag_retrieval": {
+        "en": {
+            "started": "Searching tactical knowledge base for both teams...",
+            "completed": "Retrieved {n} tactical segments.",
+        },
+        "zh": {
+            "started": "正在检索双方球队战术知识库...",
+            "completed": "已检索到 {n} 条战术片段。",
+        },
+    },
+    "matchup_analysis": {
+        "en": {
+            "started": "Running GPT-4o matchup analysis...",
+            "completed": "Matchup analysis complete.",
+        },
+        "zh": {
+            "started": "正在运行 GPT-4o 对阵分析...",
+            "completed": "对阵分析完成。",
+        },
+    },
+    "intelligence_report": {
+        "en": {
+            "started": "Generating intelligence report...",
+            "completed": "Intelligence report saved.",
+        },
+        "zh": {
+            "started": "正在生成情报报告...",
+            "completed": "情报报告已保存。",
+        },
+    },
+}
+
+
+def _msg(node: str, key: str, lang: str, **kwargs: object) -> str:
+    tmpl = _STEP_MSGS.get(node, {}).get(lang, _STEP_MSGS.get(node, {}).get("en", {})).get(key, key)
+    return tmpl.format(**kwargs) if kwargs else tmpl
+
 
 def _deepseek() -> ChatOpenAI:
     return ChatOpenAI(
@@ -29,15 +79,16 @@ def _deepseek() -> ChatOpenAI:
 
 async def fetch_team_history(state: AnalysisState) -> dict:
     node = "fetch_team_history"
+    lang = state.get("language", "en")
     try:
-        step_log = await push_step(state, node, "started", "Loading team historical data...")
+        step_log = await push_step(state, node, "started", _msg(node, "started", lang))
 
         from sqlalchemy import text
         from app.db.postgres import AsyncSessionLocal
 
         team_ids = state.get("team_ids") or []
         if len(team_ids) < 2:
-            return {"step_log": await push_step(state, node, "failed", "Need 2 team IDs."),
+            return {"step_log": await push_step(state, node, "failed", _msg(node, "failed", lang)),
                     "error": "Insufficient team IDs"}
 
         home_id, away_id = team_ids[0], team_ids[1]
@@ -70,8 +121,8 @@ async def fetch_team_history(state: AnalysisState) -> dict:
 
         step_log = await push_step(
             state, node, "completed",
-            f"Found {len(h2h_matches)} head-to-head matches for "
-            f"{teams.get(home_id, home_id)} vs {teams.get(away_id, away_id)}."
+            _msg(node, "completed", lang, n=len(h2h_matches),
+                 home=teams.get(home_id, home_id), away=teams.get(away_id, away_id))
         )
         return {
             "step_log": step_log,
@@ -90,8 +141,9 @@ async def fetch_team_history(state: AnalysisState) -> dict:
 
 async def rag_retrieval(state: AnalysisState) -> dict:
     node = "rag_retrieval"
+    lang = state.get("language", "en")
     try:
-        step_log = await push_step(state, node, "started", "Searching tactical knowledge base for both teams...")
+        step_log = await push_step(state, node, "started", _msg(node, "started", lang))
 
         ar = state.get("analysis_result") or {}
         teams = ar.get("teams", {})
@@ -111,8 +163,7 @@ async def rag_retrieval(state: AnalysisState) -> dict:
 
         rag_context = home_ctx + away_ctx
         step_log = await push_step(
-            state, node, "completed",
-            f"Retrieved {len(rag_context)} tactical segments."
+            state, node, "completed", _msg(node, "completed", lang, n=len(rag_context))
         )
         return {"step_log": step_log, "rag_context": rag_context}
 
@@ -123,7 +174,7 @@ async def rag_retrieval(state: AnalysisState) -> dict:
 
 @llm_retry(max_retries=3)
 async def _call_matchup_analysis(
-    ar: dict, rag_context: list[dict]
+    ar: dict, rag_context: list[dict], language: str = "en"
 ) -> str:
     llm = _deepseek()
     teams = ar.get("teams", {})
@@ -137,13 +188,34 @@ async def _call_matchup_analysis(
         f"  {m['match_date']}: {m['home_name']} {m['home_score']}-{m['away_score']} {m['away_name']} "
         f"(Formations: {m['home_formation']} vs {m['away_formation']})"
         for m in h2h[:5]
-    ) or "  No direct head-to-head records found."
+    ) or ("  No direct head-to-head records found." if language != "zh" else "  无直接对抗记录。")
 
     context_text = "\n\n".join(
         f"[Source {i+1}] {r['text']}" for i, r in enumerate(rag_context[:8])
-    ) or "No tactical context available."
+    ) or ("No tactical context available." if language != "zh" else "无战术背景数据。")
 
-    prompt = f"""You are an expert football scout and tactical analyst. Generate a pre-match intelligence report.
+    if language == "zh":
+        prompt = f"""你是一位专业足球球探和战术分析师。请生成一份详细的赛前情报报告。
+
+对阵：{home_name}（主队）vs {away_name}（客队）
+
+历史交锋记录（最近 5 场）：
+{h2h_text}
+
+来自知识库的战术背景：
+{context_text}
+
+请用 Markdown 格式生成详细情报报告，包含以下部分：
+## 对阵概述
+## {home_name} 战术画像
+## {away_name} 战术画像
+## 关键战术对抗
+## 历史交锋分析
+## 情报总结
+
+请具体分析，仅引用上述数据。如适用请标注来源 [来源 N]。"""
+    else:
+        prompt = f"""You are an expert football scout and tactical analyst. Generate a pre-match intelligence report.
 
 MATCHUP: {home_name} (Home) vs {away_name} (Away)
 
@@ -169,14 +241,15 @@ Be specific. Only use data from above. Cite [Source N] when referencing context.
 
 async def matchup_analysis(state: AnalysisState) -> dict:
     node = "matchup_analysis"
+    lang = state.get("language", "en")
     try:
-        step_log = await push_step(state, node, "started", "Running GPT-4o matchup analysis...")
+        step_log = await push_step(state, node, "started", _msg(node, "started", lang))
         ar = state.get("analysis_result") or {}
         rag_context = state.get("rag_context") or []
 
-        analysis_text = await _call_matchup_analysis(ar, rag_context)
+        analysis_text = await _call_matchup_analysis(ar, rag_context, lang)
 
-        step_log = await push_step(state, node, "completed", "Matchup analysis complete.")
+        step_log = await push_step(state, node, "completed", _msg(node, "completed", lang))
         existing = dict(ar)
         existing["analysis_text"] = analysis_text
         return {"step_log": step_log, "analysis_result": existing}
@@ -188,17 +261,32 @@ async def matchup_analysis(state: AnalysisState) -> dict:
 
 async def intelligence_report(state: AnalysisState) -> dict:
     node = "intelligence_report"
+    lang = state.get("language", "en")
     try:
-        step_log = await push_step(state, node, "started", "Generating intelligence report...")
+        step_log = await push_step(state, node, "started", _msg(node, "started", lang))
 
         ar = state.get("analysis_result") or {}
         teams = ar.get("teams", {})
         home_id = ar.get("home_id")
         away_id = ar.get("away_id")
         analysis_text = ar.get("analysis_text", "Analysis unavailable.")
+        home_name = teams.get(home_id, "Home")
+        away_name = teams.get(away_id, "Away")
 
-        report = f"""# Pre-Match Intelligence Report
-## {teams.get(home_id, 'Home')} vs {teams.get(away_id, 'Away')}
+        if lang == "zh":
+            report = f"""# 赛前情报报告
+## {home_name} vs {away_name}
+
+---
+
+{analysis_text}
+
+---
+*由 AloFootMind 生成 — 基于 GPT-4o + RAG（BAAI/bge-m3 + Milvus）*
+"""
+        else:
+            report = f"""# Pre-Match Intelligence Report
+## {home_name} vs {away_name}
 
 ---
 

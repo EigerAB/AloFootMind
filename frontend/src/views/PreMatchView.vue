@@ -76,7 +76,7 @@ import { useSseStream } from '@/composables/useSseStream'
 import AgentViewer from '@/components/AgentViewer.vue'
 import ReportViewer from '@/components/ReportViewer.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const homeQuery = ref('')
 const awayQuery = ref('')
@@ -128,7 +128,7 @@ async function generateReport() {
   isRunning.value = true
 
   try {
-    const res = await api.triggerPreMatch(homeTeam.value.team_id, awayTeam.value.team_id)
+    const res = await api.triggerPreMatch(homeTeam.value.team_id, awayTeam.value.team_id, locale.value)
     startSse(`/api/tasks/${res.task_id}/stream`, {
       onEvent: (data) => {
         stepLog.value = [...stepLog.value, data]

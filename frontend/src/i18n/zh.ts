@@ -57,6 +57,9 @@ export default {
       tactical_analysis: '战术分析',
       report_generation: '生成报告',
       supervisor: '调度器',
+      fetch_team_history: '获取球队历史',
+      matchup_analysis: '对阵分析',
+      intelligence_report: '生成情报报告',
     },
   },
   report: {

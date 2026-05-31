@@ -46,10 +46,10 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ language }) }
     ),
 
-  triggerPreMatch: (homeTeamId: number, awayTeamId: number) =>
+  triggerPreMatch: (homeTeamId: number, awayTeamId: number, language = 'en') =>
     request<{ task_id: string; status: string }>('/api/pre-match', {
       method: 'POST',
-      body: JSON.stringify({ home_team_id: homeTeamId, away_team_id: awayTeamId }),
+      body: JSON.stringify({ home_team_id: homeTeamId, away_team_id: awayTeamId, language }),
     }),
 
   getTaskStatus: (taskId: string) =>

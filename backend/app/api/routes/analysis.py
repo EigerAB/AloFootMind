@@ -21,6 +21,7 @@ router = APIRouter(prefix="/api", tags=["analysis"])
 class PreMatchRequest(BaseModel):
     home_team_id: int
     away_team_id: int
+    language: str = "en"
 
 
 class ChatRequest(BaseModel):
@@ -44,6 +45,7 @@ async def trigger_pre_match(
             "task_id": task_id,
             "request_type": "pre_match",
             "team_ids": [body.home_team_id, body.away_team_id],
+            "language": body.language,
         },
     )
     return {"task_id": task_id, "status": "pending"}

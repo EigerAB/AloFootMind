@@ -57,6 +57,9 @@ export default {
       tactical_analysis: 'Tactical Analysis',
       report_generation: 'Report Generation',
       supervisor: 'Supervisor',
+      fetch_team_history: 'Fetch Team History',
+      matchup_analysis: 'Matchup Analysis',
+      intelligence_report: 'Intelligence Report',
     },
   },
   report: {
