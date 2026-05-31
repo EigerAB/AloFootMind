@@ -7,6 +7,7 @@ const router = createRouter({
     {
       path: '/matches',
       component: () => import('@/views/MatchListView.vue'),
+      meta: { keepAlive: true },
     },
     {
       path: '/matches/:id',
@@ -15,10 +16,12 @@ const router = createRouter({
     {
       path: '/pre-match',
       component: () => import('@/views/PreMatchView.vue'),
+      meta: { keepAlive: true },
     },
     {
       path: '/chat',
       component: () => import('@/views/ChatView.vue'),
+      meta: { keepAlive: true },
     },
   ],
 })
