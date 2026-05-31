@@ -18,7 +18,7 @@
         <span class="mt-0.5 text-base shrink-0">{{ stepIcon(step.status) }}</span>
         <div class="flex-1 min-w-0">
           <div class="font-mono text-xs font-medium" :class="stepNameClass(step.status)">
-            {{ step.node_name }}
+            {{ translateNode(step.node_name) }}
           </div>
           <div class="text-gray-400 text-xs mt-0.5 truncate">{{ step.summary }}</div>
         </div>
@@ -35,7 +35,13 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-const { t } = useI18n()
+const { t, locale } = useI18n()
+
+function translateNode(nodeName: string): string {
+  const key = `agent.nodes.${nodeName}`
+  const translated = t(key)
+  return translated === key ? nodeName : translated
+}
 
 interface StepEntry {
   node_name: string
@@ -72,7 +78,8 @@ function stepNameClass(status: string) {
 
 function formatTime(iso: string) {
   try {
-    return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    const localeStr = locale.value === 'zh' ? 'zh-CN' : 'en-US'
+    return new Date(iso).toLocaleTimeString(localeStr, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   } catch {
     return ''
   }

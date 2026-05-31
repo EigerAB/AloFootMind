@@ -117,7 +117,7 @@ import { useSseStream } from '@/composables/useSseStream'
 import AgentViewer from '@/components/AgentViewer.vue'
 import ReportViewer from '@/components/ReportViewer.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const StatCard = {
   props: ['label', 'home', 'away'],
@@ -150,7 +150,7 @@ onMounted(async () => {
   const id = Number(route.params.id)
   try {
     match.value = await api.getMatch(id)
-    const existingReport = await api.getMatchReport(id).catch(() => null)
+    const existingReport = await api.getMatchReport(id, locale.value).catch(() => null)
     if (existingReport) {
       report.value = existingReport.report_markdown
     }
@@ -163,9 +163,9 @@ async function triggerAnalysis() {
   analyzing.value = true
   agentError.value = null
   try {
-    const res = await api.triggerAnalysis(Number(route.params.id))
+    const res = await api.triggerAnalysis(Number(route.params.id), locale.value)
     if (res.status === 'already_done') {
-      const r = await api.getMatchReport(Number(route.params.id)).catch(() => null)
+      const r = await api.getMatchReport(Number(route.params.id), locale.value).catch(() => null)
       if (r) {
         report.value = r.report_markdown
         statusMsg.value = t('matchDetail.alreadyDone')
@@ -182,7 +182,7 @@ async function triggerAnalysis() {
       },
       onDone: async () => {
         isRunning.value = false
-        const r = await api.getMatchReport(Number(route.params.id)).catch(() => null)
+        const r = await api.getMatchReport(Number(route.params.id), locale.value).catch(() => null)
         if (r) report.value = r.report_markdown
         stopSse()
       },

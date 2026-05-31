@@ -51,6 +51,13 @@ export default {
       completed: '已完成',
       failed: '失败',
     },
+    nodes: {
+      fetch_match_data: '获取比赛数据',
+      rag_retrieval: 'RAG 检索',
+      tactical_analysis: '战术分析',
+      report_generation: '生成报告',
+      supervisor: '调度器',
+    },
   },
   report: {
     title: '📄 分析报告',

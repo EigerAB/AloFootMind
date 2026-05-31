@@ -51,6 +51,13 @@ export default {
       completed: 'Completed',
       failed: 'Failed',
     },
+    nodes: {
+      fetch_match_data: 'Fetch Match Data',
+      rag_retrieval: 'RAG Retrieval',
+      tactical_analysis: 'Tactical Analysis',
+      report_generation: 'Report Generation',
+      supervisor: 'Supervisor',
+    },
   },
   report: {
     title: '📄 Analysis Report',
