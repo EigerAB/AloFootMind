@@ -18,6 +18,8 @@ import dotenv
 dotenv.load_dotenv(Path(__file__).parent.parent / ".env")
 
 from app.db.postgres import AsyncSessionLocal, init_db
+from app.db.milvus_client import connect_milvus
+from app.db.milvus_init import init_milvus_collections
 from app.etl.parser import iter_all_matches, load_competitions
 from app.etl.pipeline import ingest_match, ingest_player_profiles
 
@@ -31,6 +33,11 @@ logger = logging.getLogger("ingest")
 async def main(competition_id: int | None, season_id: int | None, dry_run: bool) -> None:
     logger.info("Initialising database...")
     await init_db()
+    logger.info("Ensuring Milvus collections exist...")
+    from app.core.config import settings
+    init_milvus_collections(settings.MILVUS_HOST, settings.MILVUS_PORT)
+    logger.info("Reconnecting to Milvus for ETL session...")
+    connect_milvus()
 
     competitions = load_competitions(competition_id)
     logger.info(f"Found {len(competitions)} competition/season entries to process.")

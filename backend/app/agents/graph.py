@@ -1,9 +1,16 @@
 """Main LangGraph: Supervisor + three Sub-graphs."""
 from __future__ import annotations
 
+import os
 import uuid
 from typing import Literal
 from venv import logger
+
+try:
+    from langsmith import traceable as _ls_traceable
+except ImportError:
+    def _ls_traceable(*a, **kw):
+        return lambda f: f
 
 from langgraph.graph import END, StateGraph
 
@@ -125,6 +132,7 @@ def get_main_graph():
     return _main_graph
 
 
+@_ls_traceable(run_type="chain", name="run_analysis")
 async def run_analysis(initial_state: dict) -> AnalysisState:
     """Entry point for triggering an analysis task."""
     import logging
@@ -147,7 +155,10 @@ async def run_analysis(initial_state: dict) -> AnalysisState:
         language=initial_state.get("language", "en"),
     )
     try:
-        return await get_main_graph().ainvoke(state)
+        return await get_main_graph().ainvoke(
+            state,
+            config={"run_name": f"analysis-{task_id}"},
+        )
     except Exception as exc:
         logger.exception(f"[run_analysis] task {task_id} failed: {exc}")
         await set_task_status(task_id, "failed")

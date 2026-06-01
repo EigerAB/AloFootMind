@@ -1,7 +1,13 @@
 """Write RAG corpus vectors to Milvus collections."""
-from pymilvus import Collection
+from pymilvus import Collection, connections
 
 from app.services.embedder import embed_texts
+
+
+def _ensure_connected() -> None:
+    if not connections.has_connection("default"):
+        from app.db.milvus_client import connect_milvus
+        connect_milvus()
 
 
 def _batch_insert(collection: Collection, rows: list[dict], field_names: list[str]) -> None:
@@ -21,6 +27,7 @@ def write_match_summaries(
     """
     if not entries:
         return
+    _ensure_connected()
     texts = [e["text"] for e in entries]
     vectors = embed_texts(texts)
 
@@ -55,6 +62,7 @@ def write_tactical_segments(
     """
     if not entries:
         return
+    _ensure_connected()
     texts = [e["text"] for e in entries]
     vectors = embed_texts(texts)
 
@@ -89,6 +97,7 @@ def write_player_profiles(
     """
     if not entries:
         return
+    _ensure_connected()
     texts = [e["text"] for e in entries]
     vectors = embed_texts(texts)
 

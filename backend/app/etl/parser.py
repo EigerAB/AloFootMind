@@ -59,8 +59,43 @@ def iter_all_matches(competition_id: int | None = None, season_id: int | None = 
             yield comp_entry, match
 
 
-def parse_match_record(comp_entry: dict, match: dict) -> dict:
-    """Flatten a StatsBomb match JSON into a clean dict."""
+def extract_formations(
+    events: list[dict],
+    home_team_id: int,
+    away_team_id: int,
+) -> tuple[int | None, int | None]:
+    """Extract starting formations from StatsBomb events.
+
+    Formation data lives in "Starting XI" (type.id=35) and
+    "Tactical Shift" (type.id=36) events, NOT in the matches JSON.
+    Returns (home_formation, away_formation) as integer codes (e.g. 4231).
+    """
+    home_formation: int | None = None
+    away_formation: int | None = None
+    for ev in events:
+        ev_type_name = (ev.get("type") or {}).get("name", "")
+        if ev_type_name not in ("Starting XI", "Tactical Shift", "首发阵容", "战术调整"):
+            continue
+        formation = (ev.get("tactics") or {}).get("formation")
+        if formation is None:
+            continue
+        team_id = (ev.get("team") or {}).get("id")
+        if team_id == home_team_id and home_formation is None:
+            home_formation = formation
+        elif team_id == away_team_id and away_formation is None:
+            away_formation = formation
+        if home_formation is not None and away_formation is not None:
+            break
+    return home_formation, away_formation
+
+
+def parse_match_record(comp_entry: dict, match: dict, events: list[dict] | None = None) -> dict:
+    """Flatten a StatsBomb match JSON into a clean dict.
+
+    Pass *events* (the match event list) to populate home_formation /
+    away_formation — StatsBomb stores formation only in events, not in
+    the match JSON.
+    """
     home = match.get("home_team", {})
     away = match.get("away_team", {})
 
@@ -70,22 +105,30 @@ def parse_match_record(comp_entry: dict, match: dict) -> dict:
             return m.get("name")
         return None
 
+    home_team_id = home.get("home_team_id")
+    away_team_id = away.get("away_team_id")
+
+    if events:
+        home_formation, away_formation = extract_formations(events, home_team_id, away_team_id)
+    else:
+        home_formation, away_formation = None, None
+
     return {
         "match_id": match["match_id"],
         "match_date": match.get("match_date", ""),
         "kick_off": match.get("kick_off"),
         "competition_id": comp_entry["competition_id"],
         "season_id": comp_entry["season_id"],
-        "home_team_id": home.get("home_team_id"),
+        "home_team_id": home_team_id,
         "home_team_name": home.get("home_team_name", ""),
-        "away_team_id": away.get("away_team_id"),
+        "away_team_id": away_team_id,
         "away_team_name": away.get("away_team_name", ""),
         "home_score": match.get("home_score", 0),
         "away_score": match.get("away_score", 0),
         "match_week": match.get("match_week"),
         "stadium_name": (match.get("stadium") or {}).get("name"),
-        "home_formation": match.get("home_team", {}).get("home_team_formation"),
-        "away_formation": match.get("away_team", {}).get("away_team_formation"),
+        "home_formation": home_formation,
+        "away_formation": away_formation,
         "home_manager": _manager_name(match.get("home_team", {}).get("managers", [])),
         "away_manager": _manager_name(match.get("away_team", {}).get("managers", [])),
         "competition_name": comp_entry.get("competition_name", ""),

@@ -213,8 +213,8 @@ async def _call_matchup_analysis(
 ## 历史交锋分析
 ## 情报总结
 
-请具体分析，仅引用上述数据。如适用请标注来源 [来源 N]。
-不要包含任何开场白、客套语或免责声明，直接从 ## 对阵概述 开始。"""
+请具体分析，仅引用上述数据。如适用请标注来源 [来源 N]。"""
+# 不要包含任何开场白、客套语或免责声明，直接从 ## 对阵概述 开始。"""
     else:
         prompt = f"""You are an expert football scout and tactical analyst. Generate a pre-match intelligence report.
 

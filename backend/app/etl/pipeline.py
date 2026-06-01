@@ -101,7 +101,9 @@ async def _write_postgres(session: AsyncSession, parsed: dict) -> None:
                 :mw, :stad, :sid,
                 :hf, :af, :hm, :am
             )
-            ON CONFLICT (match_id) DO NOTHING
+            ON CONFLICT (match_id) DO UPDATE
+                SET home_formation = EXCLUDED.home_formation,
+                    away_formation = EXCLUDED.away_formation
         """),
         {
             "mid": mr["match_id"], "mdate": mr["match_date"], "ko": mr.get("kick_off"),
@@ -174,8 +176,8 @@ async def ingest_match(
     # ── step_parse ──────────────────────────────────────────────────────────
     if not await ilog.is_step_done(session, match_id, "step_parse"):
         try:
-            mr = parse_match_record(comp_entry, match)
             events = load_events(match_id)
+            mr = parse_match_record(comp_entry, match, events=events)
             lineups_data = load_lineups(match_id)
             lineup_records = parse_lineup_records(match_id, lineups_data)
             events_agg = parse_events_aggregated(
@@ -194,8 +196,8 @@ async def ingest_match(
             logger.error(f"[ETL] step_parse failed for match_id={match_id}: {e}")
             return
     else:
-        mr = parse_match_record(comp_entry, match)
         events = load_events(match_id)
+        mr = parse_match_record(comp_entry, match, events=events)
         lineups_data = load_lineups(match_id)
         lineup_records = parse_lineup_records(match_id, lineups_data)
         events_agg = parse_events_aggregated(

@@ -95,6 +95,11 @@ def _hybrid_search(
     top_k: int = 5,
     milvus_filter: str | None = None,
 ) -> list[dict]:
+    from app.db.milvus_client import connect_milvus
+    from pymilvus import connections
+    if not connections.has_connection("default"):
+        connect_milvus()
+
     vectors = embed_single(query)
     dense_vec = vectors["dense_vector"]
     sparse_vec = vectors["sparse_vector"]
@@ -197,7 +202,12 @@ async def retrieve(
 
         try:
             hits = _hybrid_search(collection_name, query, top_k, milvus_filter)
-        except Exception:
+        except Exception as e:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "[RAG] hybrid_search failed for %s (filter=%s): %s",
+                collection_name, milvus_filter, e
+            )
             hits = []
 
         await _set_cached(cache_key, hits)
