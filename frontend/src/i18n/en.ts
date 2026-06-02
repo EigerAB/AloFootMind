@@ -75,6 +75,9 @@ export default {
     searchPlaceholder: 'Search team...',
     generateBtn: '🔍 Generate Intelligence Report',
     generating: 'Generating...',
+    sameTeamTitle: 'Invalid Selection',
+    sameTeamMsg: 'Home and away team cannot be the same. Please choose different teams.',
+    sameTeamClose: 'Got it',
   },
   chat: {
     title: 'AI Football Chat',

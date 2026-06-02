@@ -65,6 +65,29 @@
 
     <!-- Report -->
     <ReportViewer v-if="report" :markdown="report" />
+
+    <!-- Same-team error dialog -->
+    <Teleport to="body">
+      <div
+        v-if="showSameTeamError"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+        @click.self="showSameTeamError = false"
+      >
+        <div class="bg-gray-900 border border-red-800/60 rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="text-2xl">⚠️</span>
+            <h3 class="text-white font-semibold text-base">{{ t('preMatch.sameTeamTitle') }}</h3>
+          </div>
+          <p class="text-gray-400 text-sm mb-5">{{ t('preMatch.sameTeamMsg') }}</p>
+          <button
+            @click="showSameTeamError = false"
+            class="w-full py-2 bg-red-700 hover:bg-red-600 text-white text-sm font-semibold rounded-lg transition-colors"
+          >
+            {{ t('preMatch.sameTeamClose') }}
+          </button>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -88,6 +111,7 @@ const isRunning = ref(false)
 const stepLog = ref<any[]>([])
 const report = ref<string | null>(null)
 const agentError = ref<string | null>(null)
+const showSameTeamError = ref(false)
 
 const { start: startSse, stop: stopSse } = useSseStream()
 
@@ -122,6 +146,10 @@ function selectTeam(side: 'home' | 'away', team: Team) {
 
 async function generateReport() {
   if (!homeTeam.value || !awayTeam.value) return
+  if (homeTeam.value.team_id === awayTeam.value.team_id) {
+    showSameTeamError.value = true
+    return
+  }
   stepLog.value = []
   report.value = null
   agentError.value = null

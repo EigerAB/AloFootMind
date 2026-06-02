@@ -75,6 +75,9 @@ export default {
     searchPlaceholder: '搜索球队...',
     generateBtn: '🔍 生成情报报告',
     generating: '生成中...',
+    sameTeamTitle: '选择无效',
+    sameTeamMsg: '主队和客队不能是同一支球队，请重新选择。',
+    sameTeamClose: '知道了',
   },
   chat: {
     title: 'AI 足球问答',
