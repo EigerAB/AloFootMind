@@ -49,6 +49,7 @@ export default {
     status: {
       started: '执行中',
       completed: '已完成',
+      error: '失败',
       failed: '失败',
     },
     nodes: {
@@ -60,7 +61,14 @@ export default {
       fetch_team_history: '获取球队历史',
       matchup_analysis: '对阵分析',
       intelligence_report: '生成情报报告',
+      finalize: '收尾',
     },
+    h2hTitle: '历史交锋',
+    h2hNoData: '暂无交锋记录',
+    ragTitle: 'RAG 战术片段',
+    ragNoData: '无片段数据',
+    collapse: '收起',
+    expand: '查看详情',
   },
   report: {
     title: '📄 分析报告',

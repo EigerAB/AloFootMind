@@ -10,7 +10,7 @@ from langgraph.graph import END, StateGraph
 DEEPSEEK_BASE = "https://api.deepseek.com/v1"
 
 from app.agents.state import AnalysisState
-from app.agents.utils import llm_retry, push_step, set_task_result
+from app.agents.utils import llm_retry, push_step, set_task_result, set_task_status
 from app.core.config import settings
 from app.services.rag_service import retrieve
 
@@ -119,10 +119,23 @@ async def fetch_team_history(state: AnalysisState) -> dict:
             )
             h2h_matches = [dict(r) for r in history.mappings()]
 
+        h2h_data = [
+            {
+                "match_date": str(m["match_date"]),
+                "home_name": m["home_name"],
+                "away_name": m["away_name"],
+                "home_score": m["home_score"],
+                "away_score": m["away_score"],
+                "home_formation": m["home_formation"],
+                "away_formation": m["away_formation"],
+            }
+            for m in h2h_matches
+        ]
         step_log = await push_step(
             state, node, "completed",
             _msg(node, "completed", lang, n=len(h2h_matches),
-                 home=teams.get(home_id, home_id), away=teams.get(away_id, away_id))
+                 home=teams.get(home_id, home_id), away=teams.get(away_id, away_id)),
+            data={"h2h_matches": h2h_data},
         )
         return {
             "step_log": step_log,
@@ -135,7 +148,8 @@ async def fetch_team_history(state: AnalysisState) -> dict:
         }
 
     except Exception as e:
-        step_log = await push_step(state, node, "failed", str(e))
+        await set_task_status(state["task_id"], "failed")
+        step_log = await push_step(state, node, "error", str(e))
         return {"step_log": step_log, "error": str(e)}
 
 
@@ -162,13 +176,20 @@ async def rag_retrieval(state: AnalysisState) -> dict:
         )
 
         rag_context = home_ctx + away_ctx
+        segments_data = [
+            {"text": r["text"][:200], "collection": r.get("collection", ""), "score": round(float(r.get("score", 0)), 3)}
+            for r in rag_context
+        ]
         step_log = await push_step(
-            state, node, "completed", _msg(node, "completed", lang, n=len(rag_context))
+            state, node, "completed",
+            _msg(node, "completed", lang, n=len(rag_context)),
+            data={"segments": segments_data},
         )
         return {"step_log": step_log, "rag_context": rag_context}
 
     except Exception as e:
-        step_log = await push_step(state, node, "failed", str(e))
+        await set_task_status(state["task_id"], "failed")
+        step_log = await push_step(state, node, "error", str(e))
         return {"step_log": step_log, "rag_context": [], "error": str(e)}
 
 
@@ -257,7 +278,8 @@ async def matchup_analysis(state: AnalysisState) -> dict:
         return {"step_log": step_log, "analysis_result": existing}
 
     except Exception as e:
-        step_log = await push_step(state, node, "failed", str(e))
+        await set_task_status(state["task_id"], "failed")
+        step_log = await push_step(state, node, "error", str(e))
         return {"step_log": step_log, "error": str(e)}
 
 
@@ -315,8 +337,13 @@ async def intelligence_report(state: AnalysisState) -> dict:
         return {"step_log": step_log, "report_markdown": report}
 
     except Exception as e:
-        step_log = await push_step(state, node, "failed", str(e))
+        await set_task_status(state["task_id"], "failed")
+        step_log = await push_step(state, node, "error", str(e))
         return {"step_log": step_log, "error": str(e)}
+
+
+def _route_on_error(state: AnalysisState) -> str:
+    return "error" if state.get("error") else "continue"
 
 
 def build_pre_match_graph() -> StateGraph:
@@ -327,9 +354,9 @@ def build_pre_match_graph() -> StateGraph:
     graph.add_node("intelligence_report", intelligence_report)
 
     graph.set_entry_point("fetch_team_history")
-    graph.add_edge("fetch_team_history", "rag_retrieval")
-    graph.add_edge("rag_retrieval", "matchup_analysis")
-    graph.add_edge("matchup_analysis", "intelligence_report")
+    graph.add_conditional_edges("fetch_team_history", _route_on_error, {"continue": "rag_retrieval", "error": END})
+    graph.add_conditional_edges("rag_retrieval", _route_on_error, {"continue": "matchup_analysis", "error": END})
+    graph.add_conditional_edges("matchup_analysis", _route_on_error, {"continue": "intelligence_report", "error": END})
     graph.add_edge("intelligence_report", END)
 
     return graph.compile()

@@ -9,11 +9,12 @@ from typing_extensions import TypedDict
 from langgraph.graph.message import add_messages
 
 
-class StepLogEntry(TypedDict):
+class StepLogEntry(TypedDict, total=False):
     node_name: str
-    status: Literal["started", "completed", "failed"]
+    status: Literal["started", "completed", "error"]
     summary: str
     timestamp: str
+    data: dict | None
 
 
 def _now_iso() -> str:
@@ -38,12 +39,16 @@ class AnalysisState(TypedDict):
 
 def make_step_entry(
     node_name: str,
-    status: Literal["started", "completed", "failed"],
+    status: Literal["started", "completed", "error"],
     summary: str,
+    data: dict | None = None,
 ) -> StepLogEntry:
-    return StepLogEntry(
+    entry = StepLogEntry(
         node_name=node_name,
         status=status,
         summary=summary,
         timestamp=_now_iso(),
     )
+    if data is not None:
+        entry["data"] = data
+    return entry

@@ -49,6 +49,7 @@ export default {
     status: {
       started: 'Running',
       completed: 'Completed',
+      error: 'Failed',
       failed: 'Failed',
     },
     nodes: {
@@ -60,7 +61,14 @@ export default {
       fetch_team_history: 'Fetch Team History',
       matchup_analysis: 'Matchup Analysis',
       intelligence_report: 'Intelligence Report',
+      finalize: 'Finalize',
     },
+    h2hTitle: 'Head-to-Head History',
+    h2hNoData: 'No head-to-head records found',
+    ragTitle: 'RAG Tactical Segments',
+    ragNoData: 'No segment data',
+    collapse: 'Collapse',
+    expand: 'View Details',
   },
   report: {
     title: '📄 Analysis Report',

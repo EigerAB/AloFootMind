@@ -74,7 +74,7 @@ async def get_task_result(task_id: str):
 
 
 async def _sse_generator(task_id: str) -> AsyncGenerator[str, None]:
-    """Poll Redis step_log and stream incremental SSE events."""
+    """Poll Redis list and stream incremental SSE events (LRANGE, append-only)."""
     redis = await get_redis()
     sent_count = 0
     max_wait_seconds = 300
@@ -82,13 +82,11 @@ async def _sse_generator(task_id: str) -> AsyncGenerator[str, None]:
     poll_interval = 0.5
 
     while elapsed < max_wait_seconds:
-        log_raw = await redis.get(f"task:{task_id}:log")
-        if log_raw:
-            log: list[dict] = json.loads(log_raw)
-            new_entries = log[sent_count:]
-            for entry in new_entries:
-                yield f"data: {json.dumps(entry, ensure_ascii=False)}\n\n"
-                sent_count += 1
+        new_entries = await redis.lrange(f"task:{task_id}:log", sent_count, -1)
+        for raw in new_entries:
+            decoded = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+            yield f"data: {decoded}\n\n"
+            sent_count += 1
 
         status = await redis.get(f"task:{task_id}:status")
         if status == "completed":

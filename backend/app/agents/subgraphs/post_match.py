@@ -12,7 +12,7 @@ from langgraph.graph import END, StateGraph
 DEEPSEEK_BASE = "https://api.deepseek.com/v1"
 
 from app.agents.state import AnalysisState
-from app.agents.utils import llm_retry, push_step, set_task_result
+from app.agents.utils import llm_retry, push_step, set_task_result, set_task_status
 from app.core.config import settings
 from app.services.rag_service import retrieve
 
@@ -86,7 +86,8 @@ async def fetch_match_data(state: AnalysisState) -> dict:
         return {"step_log": step_log, "analysis_result": {"match_data": match_data}}
 
     except Exception as e:
-        step_log = await push_step(state, node, "failed", str(e))
+        await set_task_status(state["task_id"], "failed")
+        step_log = await push_step(state, node, "error", str(e))
         return {"step_log": step_log, "error": str(e)}
 
 
@@ -110,16 +111,21 @@ async def rag_retrieval(state: AnalysisState) -> dict:
             force_levels=["tactical_level", "match_level"],
         )
 
+        segments_data = [
+            {"text": r["text"][:200], "collection": r.get("collection", ""), "score": round(float(r.get("score", 0)), 3)}
+            for r in results
+        ]
+        lang = state.get("language", "en")
+        summary = f"已检索到 {len(results)} 条相关战术片段。" if lang == "zh" else f"Retrieved {len(results)} relevant tactical segments."
         step_log = await push_step(
-            state,
-            node,
-            "completed",
-            f"Retrieved {len(results)} relevant tactical segments.",
+            state, node, "completed", summary,
+            data={"segments": segments_data},
         )
         return {"step_log": step_log, "rag_context": results}
 
     except Exception as e:
-        step_log = await push_step(state, node, "failed", str(e))
+        await set_task_status(state["task_id"], "failed")
+        step_log = await push_step(state, node, "error", str(e))
         return {"step_log": step_log, "rag_context": [], "error": str(e)}
 
 
@@ -229,7 +235,8 @@ async def tactical_analysis(state: AnalysisState) -> dict:
         return {"step_log": step_log, "analysis_result": existing}
 
     except Exception as e:
-        step_log = await push_step(state, node, "failed", str(e))
+        await set_task_status(state["task_id"], "failed")
+        step_log = await push_step(state, node, "error", str(e))
         return {"step_log": step_log, "error": str(e)}
 
 
@@ -295,8 +302,13 @@ async def report_generation(state: AnalysisState) -> dict:
         return {"step_log": step_log, "report_markdown": report}
 
     except Exception as e:
-        step_log = await push_step(state, node, "failed", str(e))
+        await set_task_status(state["task_id"], "failed")
+        step_log = await push_step(state, node, "error", str(e))
         return {"step_log": step_log, "error": str(e)}
+
+
+def _route_on_error(state: AnalysisState) -> str:
+    return "error" if state.get("error") else "continue"
 
 
 def build_post_match_graph() -> StateGraph:
@@ -307,9 +319,9 @@ def build_post_match_graph() -> StateGraph:
     graph.add_node("report_generation", report_generation)
 
     graph.set_entry_point("fetch_match_data")
-    graph.add_edge("fetch_match_data", "rag_retrieval")
-    graph.add_edge("rag_retrieval", "tactical_analysis")
-    graph.add_edge("tactical_analysis", "report_generation")
+    graph.add_conditional_edges("fetch_match_data", _route_on_error, {"continue": "rag_retrieval", "error": END})
+    graph.add_conditional_edges("rag_retrieval", _route_on_error, {"continue": "tactical_analysis", "error": END})
+    graph.add_conditional_edges("tactical_analysis", _route_on_error, {"continue": "report_generation", "error": END})
     graph.add_edge("report_generation", END)
 
     return graph.compile()

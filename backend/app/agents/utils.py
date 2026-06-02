@@ -15,24 +15,20 @@ logger = logging.getLogger(__name__)
 TASK_LOG_TTL = 3600  # 1 hour
 
 
-async def write_step_log(task_id: str, step_log: list[StepLogEntry]) -> None:
-    """Persist current step_log to Redis for SSE consumption."""
-    redis = await get_redis()
-    key = f"task:{task_id}:log"
-    await redis.set(key, json.dumps(step_log, ensure_ascii=False), ex=TASK_LOG_TTL)
-
-
 async def push_step(
     state: AnalysisState,
     node_name: str,
     status: str,
     summary: str,
+    data: dict | None = None,
 ) -> list[StepLogEntry]:
-    """Append a step entry and sync to Redis. Returns updated log."""
-    entry = make_step_entry(node_name, status, summary)
-    updated_log = list(state.get("step_log") or []) + [entry]
-    await write_step_log(state["task_id"], updated_log)
-    return updated_log
+    """Append a single step entry to the Redis list (RPUSH, no overwrite)."""
+    entry = make_step_entry(node_name, status, summary, data=data)
+    redis = await get_redis()
+    key = f"task:{state['task_id']}:log"
+    await redis.rpush(key, json.dumps(entry, ensure_ascii=False))
+    await redis.expire(key, TASK_LOG_TTL)
+    return [entry]
 
 
 async def set_task_status(task_id: str, status: str) -> None:
