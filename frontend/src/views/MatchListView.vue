@@ -202,7 +202,6 @@ function formatFormation(f: number) {
   return String(f)
     .split('')
     .join('-')
-    .replace(/^(\d)-/, '$1 ')
     .trim() || String(f)
 }
 
