@@ -65,9 +65,9 @@ def generate_tactical_segment_text(
     minute_start = possession_events[0].get("minute", 0)
     minute_end = possession_events[-1].get("minute", minute_start)
 
-    has_shot = "Shot" in event_types
-    has_dribble = "Dribble" in event_types
-    has_carry = "Carry" in event_types
+    has_shot = any(t in event_types for t in ("Shot", "射门"))
+    has_dribble = any(t in event_types for t in ("Dribble", "盘带"))
+    has_carry = any(t in event_types for t in ("Carry", "带球"))
     under_pressure_count = sum(1 for ev in possession_events if ev.get("under_pressure"))
 
     first_loc = next(
@@ -79,11 +79,11 @@ def generate_tactical_segment_text(
     start_zone = _location_zone(first_loc)
     end_zone = _location_zone(last_loc)
 
-    pass_count = event_types.count("Pass")
+    pass_count = sum(1 for t in event_types if t in ("Pass", "传球"))
     shot_outcome = None
     if has_shot:
         for ev in possession_events:
-            if (ev.get("type") or {}).get("name") == "Shot":
+            if (ev.get("type") or {}).get("name") in ("Shot", "射门"):
                 shot_outcome = (ev.get("shot") or {}).get("outcome", {}).get("name", "")
                 break
 
@@ -113,12 +113,17 @@ def generate_tactical_segment_text(
         parts.append(f"Ended with a shot attempt, {outcome_desc}.")
     else:
         last_type = event_types[-1] if event_types else "unknown"
-        last_label = {
+        _CN_EN_MAP = {
             "Ball Receipt*": "possession lost",
+            "接球*": "possession lost",
             "Pressure": "disrupted by opponent pressure",
+            "施压": "disrupted by opponent pressure",
             "Foul Committed": "ended with a foul",
+            "犯规": "ended with a foul",
             "Clearance": "cleared by defense",
-        }.get(last_type, f"ended with {last_type.lower()}")
+            "解围": "cleared by defense",
+        }
+        last_label = _CN_EN_MAP.get(last_type, f"ended with {last_type.lower()}")
         parts.append(f"Possession {last_label}.")
 
     return " ".join(parts)
@@ -244,7 +249,7 @@ def aggregate_player_season_stats(
             if pos_name:
                 positions.add(pos_name)
 
-            if ev_type == "Shot":
+            if ev_type in ("Shot", "射门"):
                 shots += 1
                 outcome = (ev.get("shot") or {}).get("outcome", {}).get("name", "")
                 if outcome == "Goal":
@@ -252,7 +257,7 @@ def aggregate_player_season_stats(
                 if outcome in ("Goal", "Saved", "Saved To Post"):
                     shots_on_target += 1
 
-            elif ev_type == "Pass":
+            elif ev_type in ("Pass", "传球"):
                 total_passes += 1
                 outcome = (ev.get("pass") or {}).get("outcome", {}).get("name")
                 if outcome is None:
@@ -261,10 +266,10 @@ def aggregate_player_season_stats(
                 if goal_assist:
                     assists += 1
 
-            elif ev_type == "Dribble":
+            elif ev_type in ("Dribble", "盘带"):
                 dribbles_attempted += 1
 
-            elif ev_type == "Foul Won":
+            elif ev_type in ("Foul Won", "被犯规"):
                 fouls_drawn += 1
 
         if player_in_match:

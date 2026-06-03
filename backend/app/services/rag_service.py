@@ -72,6 +72,8 @@ def build_milvus_filter(
     season_id: int | None = None,
     team_id: int | None = None,
     match_id: int | None = None,
+    match_ids: list[int] | None = None,
+    player_ids: list[int] | None = None,
 ) -> str | None:
     parts: list[str] = []
     if competition_id is not None:
@@ -82,6 +84,12 @@ def build_milvus_filter(
         parts.append(f"team_id == {team_id}")
     if match_id is not None:
         parts.append(f"match_id == {match_id}")
+    if match_ids:
+        ids_str = ", ".join(str(x) for x in match_ids)
+        parts.append(f"match_id in [{ids_str}]")
+    if player_ids:
+        ids_str = ", ".join(str(x) for x in player_ids)
+        parts.append(f"player_id in [{ids_str}]")
     return " && ".join(parts) if parts else None
 
 
@@ -107,7 +115,7 @@ def _hybrid_search(
     collection = Collection(collection_name)
     collection.load()
 
-    search_params_dense = {"metric_type": "COSINE", "params": {"ef": 64}}
+    search_params_dense = {"metric_type": "COSINE", "params": {"ef": 80}}
     search_params_sparse = {"metric_type": "IP", "params": {"drop_ratio_search": 0.2}}
 
     dense_req = AnnSearchRequest(
@@ -125,24 +133,35 @@ def _hybrid_search(
         expr=milvus_filter,
     )
 
+    # Collection-specific output fields (player_profiles has no match_id)
+    if collection_name == "player_profiles":
+        output_fields = ["text", "player_id", "competition_id", "season_id", "team_id"]
+    else:
+        output_fields = ["text", "match_id", "competition_id", "season_id"]
+
     results = collection.hybrid_search(
         reqs=[dense_req, sparse_req],
         rerank=RRFRanker(),
         limit=top_k,
-        output_fields=["text", "match_id", "competition_id", "season_id"],
+        output_fields=output_fields,
     )
 
     hits = []
     for hit in results[0]:
         entity = hit.fields if hasattr(hit, "fields") else hit.entity
-        hits.append({
+        hit_dict: dict[str, Any] = {
             "score": hit.score,
             "text": entity.get("text", ""),
-            "match_id": entity.get("match_id"),
             "competition_id": entity.get("competition_id"),
             "season_id": entity.get("season_id"),
             "collection": collection_name,
-        })
+        }
+        if collection_name == "player_profiles":
+            hit_dict["player_id"] = entity.get("player_id")
+            hit_dict["team_id"] = entity.get("team_id")
+        else:
+            hit_dict["match_id"] = entity.get("match_id")
+        hits.append(hit_dict)
     return hits
 
 
@@ -180,19 +199,44 @@ async def retrieve(
     season_id: int | None = None,
     team_id: int | None = None,
     match_id: int | None = None,
+    match_ids: list[int] | None = None,
+    player_ids: list[int] | None = None,
     force_levels: list[str] | None = None,
 ) -> list[dict]:
     """
     Full RAG retrieval pipeline:
       classify → filter → hybrid_search → Redis cache
     Returns merged results from all relevant collections.
+
+    * match_ids / match_id 仅对 match_summaries 与 tactical_segments 生效.
+    * player_ids 仅对 player_profiles 生效.
     """
     levels = force_levels if force_levels else classify_query(query)
-    milvus_filter = build_milvus_filter(competition_id, season_id, team_id, match_id)
 
     all_results: list[dict] = []
     for level in levels:
         collection_name = COLLECTION_MAP[level]
+
+        # Build collection-specific filter
+        if collection_name == "player_profiles":
+            milvus_filter = build_milvus_filter(
+                competition_id=competition_id,
+                season_id=season_id,
+                team_id=team_id,
+                player_ids=player_ids,
+            )
+        else:
+            # match_summaries & tactical_segments
+            _match_id = None if match_ids else match_id
+            _match_ids = match_ids
+            milvus_filter = build_milvus_filter(
+                competition_id=competition_id,
+                season_id=season_id,
+                team_id=team_id,
+                match_id=_match_id,
+                match_ids=_match_ids,
+            )
+
         cache_key = _cache_key(query, collection_name, milvus_filter, top_k)
 
         cached = await _get_cached(cache_key)

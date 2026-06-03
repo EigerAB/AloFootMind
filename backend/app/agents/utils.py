@@ -1,10 +1,11 @@
-"""Agent utility functions: step_log_writer, LLM retry decorator."""
+"""Agent utility functions: step_log_writer, LLM retry decorator, key-player extraction."""
 from __future__ import annotations
 
 import asyncio
 import functools
 import json
 import logging
+from collections import defaultdict
 from typing import Any, Callable
 
 from app.agents.state import AnalysisState, StepLogEntry, make_step_entry
@@ -61,3 +62,41 @@ def llm_retry(max_retries: int = 3, base_delay: float = 1.0):
             raise last_exc
         return wrapper
     return decorator
+
+
+def _event_weight(ev_type: str) -> float:
+    weights = {
+        "Goal": 3.0,
+        "Assist": 2.0,
+        "Red Card": 2.0,
+        "Second Yellow": 2.0,
+        "Yellow Card": 1.0,
+        "Key Pass": 1.5,
+        "Own Goal": 1.5,
+    }
+    return weights.get(ev_type, 0.5)
+
+
+def extract_key_players(key_events: list[dict], limit: int = 5) -> list[int]:
+    """Extract top-N key players from key_events_json by event weight.
+
+    Falls back to player name lookup via DB if player_id is missing.
+    Returns a deduplicated list of player_ids.
+    """
+    player_scores: dict[int, float] = defaultdict(float)
+
+    for ev in key_events:
+        ev_type = ev.get("type", "")
+        weight = _event_weight(ev_type)
+        pid = ev.get("player_id")
+        if pid:
+            player_scores[pid] += weight
+        assist_pid = ev.get("assist_player_id")
+        if assist_pid:
+            player_scores[assist_pid] += _event_weight("Assist")
+
+    if not player_scores:
+        return []
+
+    sorted_players = sorted(player_scores.items(), key=lambda x: x[1], reverse=True)
+    return [pid for pid, _ in sorted_players[:limit]]

@@ -12,7 +12,13 @@ from langgraph.graph import END, StateGraph
 DEEPSEEK_BASE = "https://api.deepseek.com/v1"
 
 from app.agents.state import AnalysisState
-from app.agents.utils import llm_retry, push_step, set_task_result, set_task_status
+from app.agents.utils import (
+    extract_key_players,
+    llm_retry,
+    push_step,
+    set_task_result,
+    set_task_status,
+)
 from app.core.config import settings
 from app.services.rag_service import retrieve
 
@@ -47,6 +53,8 @@ async def fetch_match_data(state: AnalysisState) -> dict:
                     SELECT m.match_id, m.match_date, m.home_score, m.away_score,
                            m.home_formation, m.away_formation,
                            m.home_manager, m.away_manager,
+                           m.home_team_id,
+                           m.away_team_id,
                            ht.team_name AS home_team_name,
                            at.team_name AS away_team_name,
                            ea.key_events_json,
@@ -94,34 +102,62 @@ async def fetch_match_data(state: AnalysisState) -> dict:
 async def rag_retrieval(state: AnalysisState) -> dict:
     node = "rag_retrieval"
     try:
+        lang = state.get("language", "en")
         step_log = await push_step(
-            state, node, "started", "Searching tactical knowledge base..."
+            state, node, "started",
+            "检索当场比赛战术片段与球员画像..." if lang == "zh" else "Searching tactical segments and player profiles for current match...",
         )
 
         match_data = (state.get("analysis_result") or {}).get("match_data", {})
+        current_match_id = state["match_id"]
+
         query = (
             f"{match_data.get('home_team_name', '')} vs "
             f"{match_data.get('away_team_name', '')} tactical analysis"
         )
 
-        results = await retrieve(
+        # ── Retrieve tactical segments for current match ──
+        tactical_results = await retrieve(
             query=query,
-            top_k=5,
-            match_id=state["match_id"],
-            force_levels=["tactical_level", "match_level"],
+            top_k=8,
+            match_id=current_match_id,
+            force_levels=["tactical_level"],
         )
 
+        # ── Extract key players from current match ──
+        current_key_events = json.loads(match_data.get("key_events_json") or "[]")
+        player_ids = extract_key_players(current_key_events, 5)
+
+        player_results: list[dict] = []
+        if player_ids:
+            player_results = await retrieve(
+                query=query,
+                top_k=10,
+                player_ids=player_ids,
+                force_levels=["player_level"],
+            )
+
+        all_results = tactical_results + player_results
+
         segments_data = [
-            {"text": r["text"][:200], "collection": r.get("collection", ""), "score": round(float(r.get("score", 0)), 3)}
-            for r in results
+            {
+                "text": r["text"][:200],
+                "collection": r.get("collection", ""),
+                "score": round(float(r.get("score", 0)), 3),
+            }
+            for r in all_results
         ]
-        lang = state.get("language", "en")
-        summary = f"已检索到 {len(results)} 条相关战术片段。" if lang == "zh" else f"Retrieved {len(results)} relevant tactical segments."
+
+        summary = (
+            f"已检索到 {len(all_results)} 条相关语料（战术片段/球员画像）。"
+            if lang == "zh"
+            else f"Retrieved {len(all_results)} relevant documents (tactical segments, player profiles)."
+        )
         step_log = await push_step(
             state, node, "completed", summary,
             data={"segments": segments_data},
         )
-        return {"step_log": step_log, "rag_context": results}
+        return {"step_log": step_log, "rag_context": all_results}
 
     except Exception as e:
         await set_task_status(state["task_id"], "failed")
@@ -135,7 +171,7 @@ async def _call_tactical_analysis(
 ) -> str:
     llm = _deepseek()
     context_text = "\n\n".join(
-        f"[Source {i+1}] {r['text']}" for i, r in enumerate(rag_context[:5])
+        f"[Source {i+1}] {r['text']}" for i, r in enumerate(rag_context[:20])
     ) or ("No historical context available." if language != "zh" else "无历史背景数据。")
 
     key_events = json.loads(match_data.get("key_events_json") or "[]")
@@ -173,9 +209,9 @@ async def _call_tactical_analysis(
                     ## 球员亮点
                     ## 战术总结
 
-                    请具体且具有分析性，仅引用上述数据中的事实。如适用请标注来源编号 [来源 N]。
-                    不要包含任何开场白、客套语或免责声明，直接从 ## 比赛概述 开始。
                     """
+                    # 请具体且具有分析性，仅引用上述数据中的事实。如适用请标注来源编号 [来源 N]。
+                    # 不要包含任何开场白、客套语或免责声明，直接从 ## 比赛概述 开始。
     else:
         prompt = f"""
                     You are an expert football tactical analyst. Analyze this match using the data and context provided.
@@ -204,9 +240,9 @@ async def _call_tactical_analysis(
                     ## Player Highlights
                     ## Tactical Verdict
 
-                    Be specific and analytical. Only reference facts from the data above. Cite source numbers [Source N] where applicable.
-                    Do NOT include any preamble, greeting, or disclaimer. Start directly with ## Match Overview.
                     """
+                    # Be specific and analytical. Only reference facts from the data above. Cite source numbers [Source N] where applicable.
+                    # Do NOT include any preamble, greeting, or disclaimer. Start directly with ## Match Overview.
 
     from langchain_core.messages import HumanMessage
 

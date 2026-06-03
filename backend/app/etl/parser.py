@@ -174,7 +174,7 @@ def parse_events_aggregated(match_id: int, home_team_id: int, away_team_id: int,
 
         is_home = team_id == home_team_id
 
-        if ev_type == "Shot":
+        if ev_type in ("Shot", "射门"):
             outcome = (ev.get("shot") or {}).get("outcome", {}).get("name", "")
             if is_home:
                 home_shots += 1
@@ -189,32 +189,39 @@ def parse_events_aggregated(match_id: int, home_team_id: int, away_team_id: int,
                 key_events.append({
                     "type": "Goal",
                     "team_id": team_id,
+                    "player_id": (ev.get("player") or {}).get("id"),
                     "player": (ev.get("player") or {}).get("name", ""),
                     "minute": ev.get("minute", 0),
                     "period": ev.get("period", 1),
                 })
 
-        elif ev_type == "Pass":
+        elif ev_type in ("Pass", "传球"):
             outcome = (ev.get("pass") or {}).get("outcome", {}).get("name", "")
             if is_home:
                 home_passes += 1
             else:
                 away_passes += 1
 
-        elif ev_type == "Foul Committed":
+        elif ev_type in ("Foul Committed", "犯规"):
             if is_home:
                 home_fouls += 1
             else:
                 away_fouls += 1
 
-        elif ev_type in ("Yellow Card", "Red Card", "Second Yellow"):
-            key_events.append({
-                "type": ev_type,
-                "team_id": team_id,
-                "player": (ev.get("player") or {}).get("name", ""),
-                "minute": ev.get("minute", 0),
-                "period": ev.get("period", 1),
-            })
+        elif ev_type in ("Yellow Card", "Red Card", "Second Yellow", "Bad Behaviour", "不良行为"):
+            if ev_type in ("Bad Behaviour", "不良行为"):
+                card_name = (ev.get("bad_behaviour") or {}).get("card", {}).get("name", "")
+            else:
+                card_name = ev_type
+            if card_name in ("Yellow Card", "Red Card", "Second Yellow"):
+                key_events.append({
+                    "type": card_name,
+                    "team_id": team_id,
+                    "player_id": (ev.get("player") or {}).get("id"),
+                    "player": (ev.get("player") or {}).get("name", ""),
+                    "minute": ev.get("minute", 0),
+                    "period": ev.get("period", 1),
+                })
 
     import json as _json
     return {

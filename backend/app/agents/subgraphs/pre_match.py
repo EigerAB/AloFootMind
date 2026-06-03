@@ -1,6 +1,7 @@
 """PreMatch Sub-graph: fetch_team_history → rag_retrieval → matchup_analysis → intelligence_report."""
 from __future__ import annotations
 
+import json
 import logging
 
 from langchain_core.messages import HumanMessage
@@ -10,7 +11,7 @@ from langgraph.graph import END, StateGraph
 DEEPSEEK_BASE = "https://api.deepseek.com/v1"
 
 from app.agents.state import AnalysisState
-from app.agents.utils import llm_retry, push_step, set_task_result, set_task_status
+from app.agents.utils import extract_key_players, llm_retry, push_step, set_task_result, set_task_status
 from app.core.config import settings
 from app.services.rag_service import retrieve
 
@@ -31,12 +32,12 @@ _STEP_MSGS: dict[str, dict[str, dict[str, str]]] = {
     },
     "rag_retrieval": {
         "en": {
-            "started": "Searching tactical knowledge base for both teams...",
-            "completed": "Retrieved {n} tactical segments.",
+            "started": "Searching match summaries, tactical segments and player profiles...",
+            "completed": "Retrieved {n} relevant documents.",
         },
         "zh": {
-            "started": "正在检索双方球队战术知识库...",
-            "completed": "已检索到 {n} 条战术片段。",
+            "started": "正在检索比赛摘要、战术片段和球员画像...",
+            "completed": "已检索到 {n} 条相关语料。",
         },
     },
     "matchup_analysis": {
@@ -159,6 +160,9 @@ async def rag_retrieval(state: AnalysisState) -> dict:
     try:
         step_log = await push_step(state, node, "started", _msg(node, "started", lang))
 
+        from sqlalchemy import text
+        from app.db.postgres import AsyncSessionLocal
+
         ar = state.get("analysis_result") or {}
         teams = ar.get("teams", {})
         home_id = ar.get("home_id")
@@ -166,26 +170,112 @@ async def rag_retrieval(state: AnalysisState) -> dict:
         home_name = teams.get(home_id, "Home team")
         away_name = teams.get(away_id, "Away team")
 
-        home_ctx = await retrieve(
-            query=f"{home_name} attacking tactics and formation",
-            top_k=4, team_id=home_id, force_levels=["tactical_level"],
-        )
-        away_ctx = await retrieve(
-            query=f"{away_name} defensive tactics and formation",
-            top_k=4, team_id=away_id, force_levels=["tactical_level"],
-        )
+        h2h_matches = ar.get("h2h_matches", [])
+        h2h_match_ids = {m["match_id"] for m in h2h_matches}
+        h2h_latest_id = h2h_matches[0]["match_id"] if h2h_matches else None
 
-        rag_context = home_ctx + away_ctx
+        h2h_key_events: list[dict] = []
+        home_last_id = None
+        home_key_events: list[dict] = []
+        away_last_id = None
+        away_key_events: list[dict] = []
+
+        async with AsyncSessionLocal() as session:
+            # 1) h2h 最近一场的 key_events
+            if h2h_latest_id:
+                result = await session.execute(
+                    text("SELECT key_events_json FROM events_aggregated WHERE match_id = :mid"),
+                    {"mid": h2h_latest_id},
+                )
+                row = result.mappings().first()
+                if row:
+                    h2h_key_events = json.loads(row["key_events_json"] or "[]")
+
+            # 2) 主队最近一场（排除 h2h）
+            home_result = await session.execute(
+                text("""
+                    SELECT m.match_id, ea.key_events_json
+                    FROM matches m
+                    LEFT JOIN events_aggregated ea ON m.match_id = ea.match_id
+                    WHERE (m.home_team_id = :tid OR m.away_team_id = :tid)
+                    ORDER BY m.match_date DESC
+                    LIMIT 3
+                """),
+                {"tid": home_id},
+            )
+            for row in home_result.mappings():
+                if row["match_id"] not in h2h_match_ids:
+                    home_last_id = row["match_id"]
+                    home_key_events = json.loads(row["key_events_json"] or "[]")
+                    break
+
+            # 3) 客队最近一场（排除 h2h）
+            away_result = await session.execute(
+                text("""
+                    SELECT m.match_id, ea.key_events_json
+                    FROM matches m
+                    LEFT JOIN events_aggregated ea ON m.match_id = ea.match_id
+                    WHERE (m.home_team_id = :tid OR m.away_team_id = :tid)
+                    ORDER BY m.match_date DESC
+                    LIMIT 3
+                """),
+                {"tid": away_id},
+            )
+            for row in away_result.mappings():
+                if row["match_id"] not in h2h_match_ids:
+                    away_last_id = row["match_id"]
+                    away_key_events = json.loads(row["key_events_json"] or "[]")
+                    break
+
+        # 4) 三维度检索
+        all_results: list[dict] = []
+
+        # match_level: 仅 h2h 最近一场的 match summaries
+        if h2h_latest_id:
+            match_results = await retrieve(
+                query=f"{home_name} vs {away_name} match summary",
+                top_k=2,
+                match_ids=[h2h_latest_id],
+                force_levels=["match_level"],
+            )
+            all_results.extend(match_results)
+
+        # tactical_level: h2h + 主队最近 + 客队最近
+        tactical_match_ids = [mid for mid in [h2h_latest_id, home_last_id, away_last_id] if mid]
+        if tactical_match_ids:
+            tactical_results = await retrieve(
+                query=f"{home_name} vs {away_name} tactical analysis",
+                top_k=8,
+                match_ids=tactical_match_ids,
+                force_levels=["tactical_level"],
+            )
+            all_results.extend(tactical_results)
+
+        # player_level: 关键球员画像
+        h2h_players = extract_key_players(h2h_key_events, 5)
+        home_players = extract_key_players(home_key_events, 5)
+        away_players = extract_key_players(away_key_events, 5)
+        player_ids = list(dict.fromkeys(h2h_players + home_players + away_players))
+
+        if player_ids:
+            player_results = await retrieve(
+                query=f"{home_name} vs {away_name} key players",
+                top_k=10,
+                player_ids=player_ids,
+                force_levels=["player_level"],
+            )
+            all_results.extend(player_results)
+
         segments_data = [
             {"text": r["text"][:200], "collection": r.get("collection", ""), "score": round(float(r.get("score", 0)), 3)}
-            for r in rag_context
+            for r in all_results
         ]
         step_log = await push_step(
             state, node, "completed",
-            _msg(node, "completed", lang, n=len(rag_context)),
+            _msg(node, "completed", lang, n=len(all_results)),
             data={"segments": segments_data},
         )
-        return {"step_log": step_log, "rag_context": rag_context}
+        return {"step_log": step_log, "rag_context": all_results}
 
     except Exception as e:
         await set_task_status(state["task_id"], "failed")
@@ -212,7 +302,7 @@ async def _call_matchup_analysis(
     ) or ("  No direct head-to-head records found." if language != "zh" else "  无直接对抗记录。")
 
     context_text = "\n\n".join(
-        f"[Source {i+1}] {r['text']}" for i, r in enumerate(rag_context[:8])
+        f"[Source {i+1}] {r['text']}" for i, r in enumerate(rag_context[:20])
     ) or ("No tactical context available." if language != "zh" else "无战术背景数据。")
 
     if language == "zh":
@@ -233,9 +323,9 @@ async def _call_matchup_analysis(
 ## 关键战术对抗
 ## 历史交锋分析
 ## 情报总结
-
-请具体分析，仅引用上述数据。如适用请标注来源 [来源 N]。"""
-# 不要包含任何开场白、客套语或免责声明，直接从 ## 对阵概述 开始。"""
+"""
+# 不要包含任何开场白、客套语或免责声明，直接从 ## 对阵概述 开始。
+# 请具体分析，仅引用上述数据。如适用请标注来源 [来源 N]。
     else:
         prompt = f"""You are an expert football scout and tactical analyst. Generate a pre-match intelligence report.
 
@@ -255,8 +345,9 @@ Generate a detailed intelligence report in Markdown with sections:
 ## Head-to-Head Analysis
 ## Intelligence Summary
 
-Be specific. Only use data from above. Cite [Source N] when referencing context.
-Do NOT include any preamble, greeting, or disclaimer. Start directly with ## Matchup Overview."""
+"""
+# Be specific. Only use data from above. Cite [Source N] when referencing context.
+# Do NOT include any preamble, greeting, or disclaimer. Start directly with ## Matchup Overview.
 
     response = await llm.ainvoke([HumanMessage(content=prompt)])
     return response.content
