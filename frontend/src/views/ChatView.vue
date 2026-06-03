@@ -116,6 +116,12 @@ const isStreaming = ref(false)
 const streamBuffer = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
 
+// qa_meta for cross-turn football-intent tracking
+const qaMeta = ref<{ football_intent_count: number; generic_turn_count: number }>({
+  football_intent_count: 0,
+  generic_turn_count: 0,
+})
+
 const { post: postSse } = useSseStream()
 const { render: renderMarkdown } = useMarkdown()
 
@@ -149,6 +155,7 @@ async function sendMessage(text?: string) {
         query,
         conversation_history: history,
         session_id: 'ui-session',
+        qa_meta: qaMeta.value,
       },
       {
         onToken: (token: string) => {
@@ -167,6 +174,10 @@ async function sendMessage(text?: string) {
             content: streamBuffer.value,
             sources: (data as any).sources ?? [],
           })
+          // Persist qa_meta for next turn
+          if ((data as any).qa_meta) {
+            qaMeta.value = (data as any).qa_meta
+          }
           streamBuffer.value = ''
           isStreaming.value = false
           scrollToBottom()

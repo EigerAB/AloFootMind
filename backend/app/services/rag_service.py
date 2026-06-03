@@ -45,18 +45,33 @@ _PLAYER_KEYWORDS = re.compile(
     re.IGNORECASE,
 )
 
+# 中文关键词（用于中文查询意图分类）
+_MATCH_KEYWORDS_CN = re.compile(
+    r"比赛|赛事|结果|比分|胜负|平局|赛季|表现|战绩|对阵|交锋|复盘|总结",
+    re.IGNORECASE,
+)
+_TACTICAL_KEYWORDS_CN = re.compile(
+    r"战术|阵型|打法|进攻|防守|控球|传球|射门|反击|压迫|逼抢|xG|预期进球|盘带|带球|推进",
+    re.IGNORECASE,
+)
+_PLAYER_KEYWORDS_CN = re.compile(
+    r"球员|前锋|中场|后卫|门将|射手|助攻|进球|黄牌|红牌|阵容|画像|表现|数据",
+    re.IGNORECASE,
+)
+
 
 def classify_query(query: str) -> list[str]:
     """
     Return one or more collection targets for a query.
     Rules-first; returns multiple if query spans multiple levels.
+    Supports both English and Chinese keywords.
     """
     levels: list[str] = []
-    if _PLAYER_KEYWORDS.search(query):
+    if _PLAYER_KEYWORDS.search(query) or _PLAYER_KEYWORDS_CN.search(query):
         levels.append("player_level")
-    if _TACTICAL_KEYWORDS.search(query):
+    if _TACTICAL_KEYWORDS.search(query) or _TACTICAL_KEYWORDS_CN.search(query):
         levels.append("tactical_level")
-    if _MATCH_KEYWORDS.search(query):
+    if _MATCH_KEYWORDS.search(query) or _MATCH_KEYWORDS_CN.search(query):
         levels.append("match_level")
     if not levels:
         levels = ["tactical_level"]

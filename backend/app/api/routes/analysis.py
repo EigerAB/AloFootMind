@@ -10,10 +10,10 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.graph import run_analysis
-from app.agents.subgraphs.qa import stream_answer
+from app.agents.state import AnalysisState
+from app.agents.subgraphs.qa import build_qa_graph, stream_answer
 from app.db.postgres import get_db
 from app.db.redis_client import get_redis
-from app.services.rag_service import classify_query, retrieve
 
 router = APIRouter(prefix="/api", tags=["analysis"])
 
@@ -28,6 +28,7 @@ class ChatRequest(BaseModel):
     query: str
     session_id: str | None = None
     conversation_history: list[dict] | None = None
+    qa_meta: dict | None = None  # football_intent_count, generic_turn_count
 
 
 @router.post("/pre-match")
@@ -117,25 +118,63 @@ async def stream_task(task_id: str):
 
 @router.post("/chat")
 async def chat(body: ChatRequest):
-    """Streaming chat endpoint — returns SSE token stream."""
+    """Streaming chat endpoint — uses qa_graph for routing + stream_answer for SSE."""
     query = body.query.strip()
     if not query:
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="Query cannot be empty")
 
     history = body.conversation_history or []
-    levels = classify_query(query)
-    rag_context = await retrieve(query=query, top_k=5, force_levels=levels)
+    qa_meta = body.qa_meta or {"football_intent_count": 0, "generic_turn_count": 0}
+
+    # Build state for qa_graph
+    state: AnalysisState = {
+        "task_id": f"chat-{uuid.uuid4().hex[:8]}",
+        "request_type": "qa",
+        "match_id": None,
+        "team_ids": None,
+        "query": query,
+        "conversation_history": history,
+        "raw_events": None,
+        "rag_context": [],
+        "analysis_result": {"qa_meta": qa_meta},
+        "report_markdown": None,
+        "step_log": [],
+        "error": None,
+        "language": "zh",
+    }
+
+    # Run qa_graph to determine route and get context
+    graph = build_qa_graph()
+    result = await graph.ainvoke(state)
+
+    ar = result.get("analysis_result", {})
+    route = ar.get("_route", "classify")
+    updated_qa_meta = ar.get("qa_meta", qa_meta)
 
     async def _generate():
-        async for token in stream_answer(query, rag_context, history):
-            yield f"data: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
+        if route == "classify":
+            # Football-related: stream with RAG context
+            rag_context = result.get("rag_context", [])
+            async for token in stream_answer(query, rag_context, history, language="zh"):
+                yield f"data: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
 
-        sources = [
-            {"text": r["text"][:120], "collection": r["collection"]}
-            for r in rag_context[:3]
-        ]
-        yield f"event: done\ndata: {json.dumps({'sources': sources})}\n\n"
+            sources = [
+                {"text": r["text"][:120], "collection": r.get("collection", "")}
+                for r in rag_context[:3]
+            ]
+            yield (
+                f"event: done\n"
+                f"data: {json.dumps({'sources': sources, 'qa_meta': updated_qa_meta}, ensure_ascii=False)}\n\n"
+            )
+        else:
+            # boundary_answer or direct_answer: pre-generated, yield as single token
+            report = result.get("report_markdown", "")
+            yield f"data: {json.dumps({'token': report}, ensure_ascii=False)}\n\n"
+            yield (
+                f"event: done\n"
+                f"data: {json.dumps({'sources': [], 'qa_meta': updated_qa_meta}, ensure_ascii=False)}\n\n"
+            )
 
     return StreamingResponse(
         _generate(),
