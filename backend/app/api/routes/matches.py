@@ -15,36 +15,61 @@ from app.db.redis_client import get_redis
 router = APIRouter(prefix="/api/matches", tags=["matches"])
 
 
-@router.get("")
+class MatchListRequest(BaseModel):
+    competition_id: Optional[int] = None
+    season_id: Optional[int] = None
+    team_id: Optional[int] = None
+    limit: int = 50
+    offset: int = 0
+
+
+@router.post("")
 async def list_matches(
-    competition_id: Optional[int] = None,
-    season_id: Optional[int] = None,
-    team_id: Optional[int] = None,
-    limit: int = 50,
-    offset: int = 0,
+    body: MatchListRequest,
     session: AsyncSession = Depends(get_db),
 ):
     filters = ["1=1"]
-    params: dict = {"limit": limit, "offset": offset}
+    params: dict = {}
 
-    if competition_id:
+    if body.competition_id is not None:
         filters.append("s.competition_id = :competition_id")
-        params["competition_id"] = competition_id
-    if season_id:
+        params["competition_id"] = body.competition_id
+    if body.season_id is not None:
         filters.append("s.season_id = :season_id")
-        params["season_id"] = season_id
-    if team_id:
+        params["season_id"] = body.season_id
+    if body.team_id is not None:
         filters.append("(m.home_team_id = :team_id OR m.away_team_id = :team_id)")
-        params["team_id"] = team_id
+        params["team_id"] = body.team_id
 
     where = " AND ".join(filters)
+
+    count_result = await session.execute(
+        text(f"""
+            SELECT COUNT(*) AS total
+            FROM matches m
+            JOIN teams ht ON m.home_team_id = ht.team_id
+            JOIN teams at ON m.away_team_id = at.team_id
+            JOIN seasons s ON m.season_id = s.id
+            JOIN competitions c ON s.competition_id = c.competition_id
+            WHERE {where}
+        """),
+        params,
+    )
+    total = count_result.scalar_one() or 0
+
+    params["limit"] = body.limit
+    params["offset"] = body.offset
     result = await session.execute(
         text(f"""
             SELECT m.match_id, m.match_date, m.home_score, m.away_score,
                    m.match_week, m.home_formation, m.away_formation,
                    ht.team_name AS home_team_name,
                    at.team_name AS away_team_name,
-                   c.competition_name, s.season_name
+                   c.competition_name, s.season_name,
+                   EXISTS (
+                       SELECT 1 FROM analysis_reports ar
+                       WHERE ar.match_id = m.match_id AND ar.report_type = 'post_match'
+                   ) AS has_report
             FROM matches m
             JOIN teams ht ON m.home_team_id = ht.team_id
             JOIN teams at ON m.away_team_id = at.team_id
@@ -56,7 +81,8 @@ async def list_matches(
         """),
         params,
     )
-    return [dict(r) for r in result.mappings()]
+    items = [dict(r) for r in result.mappings()]
+    return {"items": items, "total": total}
 
 
 @router.get("/{match_id}")

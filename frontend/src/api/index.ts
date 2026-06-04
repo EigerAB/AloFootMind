@@ -24,13 +24,16 @@ export const api = {
     limit?: number
     offset?: number
   }) => {
-    const qs = new URLSearchParams()
-    if (params?.competition_id) qs.set('competition_id', String(params.competition_id))
-    if (params?.season_id) qs.set('season_id', String(params.season_id))
-    if (params?.team_id) qs.set('team_id', String(params.team_id))
-    if (params?.limit) qs.set('limit', String(params.limit))
-    if (params?.offset) qs.set('offset', String(params.offset))
-    return request<Match[]>(`/api/matches?${qs}`)
+    return request<{ items: Match[]; total: number }>('/api/matches', {
+      method: 'POST',
+      body: JSON.stringify({
+        competition_id: params?.competition_id ?? null,
+        season_id: params?.season_id ?? null,
+        team_id: params?.team_id ?? null,
+        limit: params?.limit ?? 50,
+        offset: params?.offset ?? 0,
+      }),
+    })
   },
 
   getMatch: (id: number) => request<MatchDetail>(`/api/matches/${id}`),
@@ -88,6 +91,7 @@ export interface Match {
   away_team_name: string
   competition_name: string
   season_name: string
+  has_report?: boolean
 }
 
 export interface MatchDetail extends Match {
