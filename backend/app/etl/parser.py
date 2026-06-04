@@ -208,9 +208,15 @@ def parse_events_aggregated(match_id: int, home_team_id: int, away_team_id: int,
             else:
                 away_fouls += 1
 
-        elif ev_type in ("Yellow Card", "Red Card", "Second Yellow", "Bad Behaviour", "不良行为"):
+        elif ev_type in ("Yellow Card", "Red Card", "Second Yellow", "Bad Behaviour", "不良行为", "黄牌", "红牌", "第二黄牌"):
             if ev_type in ("Bad Behaviour", "不良行为"):
                 card_name = (ev.get("bad_behaviour") or {}).get("card", {}).get("name", "")
+            elif ev_type == "黄牌":
+                card_name = "Yellow Card"
+            elif ev_type == "红牌":
+                card_name = "Red Card"
+            elif ev_type == "第二黄牌":
+                card_name = "Second Yellow"
             else:
                 card_name = ev_type
             if card_name in ("Yellow Card", "Red Card", "Second Yellow"):
