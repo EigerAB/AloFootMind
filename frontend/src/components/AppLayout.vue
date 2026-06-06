@@ -20,7 +20,32 @@
           {{ t(link.labelKey) }}
         </RouterLink>
       </nav>
-      <div class="px-5 py-3 border-t border-gray-800 space-y-2">
+      <div class="px-5 py-3 border-t border-gray-800 space-y-3">
+        <!-- Auth indicator -->
+        <div v-if="authStore.isLoggedIn" class="flex items-center justify-between">
+          <div class="flex items-center gap-2 min-w-0">
+            <div class="w-7 h-7 bg-green-700 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0">
+              {{ authStore.user?.nickname?.charAt(0).toUpperCase() ?? 'U' }}
+            </div>
+            <span class="text-sm text-gray-300 truncate">{{ authStore.user?.nickname }}</span>
+          </div>
+          <button
+            @click="handleLogout"
+            class="text-xs text-gray-500 hover:text-red-400 transition-colors shrink-0 ml-2"
+            title="Logout"
+          >
+            {{ t('auth.logout') }}
+          </button>
+        </div>
+        <RouterLink
+          v-else
+          to="/login"
+          class="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-300 transition-colors"
+        >
+          <span class="text-base">👤</span>
+          {{ t('auth.login') }} / {{ t('auth.register') }}
+        </RouterLink>
+
         <!-- Language switcher -->
         <div class="flex items-center gap-1">
           <button
@@ -52,6 +77,19 @@
         <span class="text-green-400">Alo</span>FootMind
       </h1>
       <div class="flex items-center gap-2">
+        <!-- Mobile auth indicator -->
+        <button
+          v-if="authStore.isLoggedIn"
+          @click="handleLogout"
+          class="w-7 h-7 bg-green-700 rounded-full flex items-center justify-center text-xs font-bold text-white"
+        >
+          {{ authStore.user?.nickname?.charAt(0).toUpperCase() ?? 'U' }}
+        </button>
+        <RouterLink
+          v-else
+          to="/login"
+          class="text-lg"
+        >👤</RouterLink>
         <!-- Mobile language toggle -->
         <button
           @click="switchLocale(locale === 'zh' ? 'en' : 'zh')"
@@ -75,11 +113,25 @@
 </template>
 
 <script setup lang="ts">
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { setLocale, type LocaleKey } from '@/i18n'
+import { useAuthStore } from '@/stores/auth'
+import { api } from '@/api'
 
 const { t, locale } = useI18n()
+const authStore = useAuthStore()
+const router = useRouter()
+
+async function handleLogout() {
+  try {
+    await api.logout()
+  } catch {
+    // ignore
+  }
+  authStore.clearAuth()
+  router.push('/matches')
+}
 
 const navLinks = [
   { to: '/matches', labelKey: 'nav.matches', icon: '⚽' },

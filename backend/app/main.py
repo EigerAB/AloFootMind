@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.routes.analysis import router as analysis_router
+from app.api.routes.auth import router as auth_router
 from app.api.routes.competitions import router as competitions_router
 from app.api.routes.matches import router as matches_router
 from app.core.config import settings
@@ -46,6 +47,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
+app.include_router(auth_router)
 app.include_router(competitions_router)
 app.include_router(matches_router)
 app.include_router(analysis_router)

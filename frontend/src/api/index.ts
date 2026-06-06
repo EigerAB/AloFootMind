@@ -1,10 +1,68 @@
 const BASE_URL = ''
 
+function getAuthHeader(): Record<string, string> {
+  const token = localStorage.getItem('access_token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+let isRefreshing = false
+let refreshPromise: Promise<string | null> | null = null
+
+async function doRefresh(): Promise<string | null> {
+  if (isRefreshing && refreshPromise) {
+    return refreshPromise
+  }
+  isRefreshing = true
+  refreshPromise = (async () => {
+    const rt = localStorage.getItem('refresh_token')
+    if (!rt) return null
+    try {
+      const res = await fetch(`${BASE_URL}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: rt }),
+      })
+      if (!res.ok) return null
+      const data = await res.json()
+      localStorage.setItem('access_token', data.access_token)
+      return data.access_token as string
+    } catch {
+      return null
+    } finally {
+      isRefreshing = false
+      refreshPromise = null
+    }
+  })()
+  return refreshPromise
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(options?.headers ?? {}) },
-    ...options,
-  })
+  const url = `${BASE_URL}${path}`
+  const makeRequest = (token?: string) =>
+    fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : getAuthHeader()),
+        ...(options?.headers ?? {}),
+      },
+      ...options,
+    })
+
+  let res = await makeRequest()
+
+  // Try refresh on 401 if we have a refresh token
+  if (res.status === 401) {
+    const newToken = await doRefresh()
+    if (newToken) {
+      res = await makeRequest(newToken)
+    } else {
+      // Refresh failed — clear auth state
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('refresh_token')
+      localStorage.removeItem('user')
+    }
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
     throw new Error(err.detail ?? `HTTP ${res.status}`)
@@ -64,6 +122,54 @@ export const api = {
     request<{ task_id: string; result: string }>(
       `/api/tasks/${taskId}/result`
     ),
+
+  // Auth
+  register: (body: { email: string; password: string; nickname: string }) =>
+    request<{ message: string }>('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  verifyEmail: (body: { email: string; code: string }) =>
+    request<{ message: string }>('/api/auth/verify-email', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  login: (body: { email: string; password: string }) =>
+    request<{ access_token: string; refresh_token: string; user: User }>(
+      '/api/auth/login',
+      { method: 'POST', body: JSON.stringify(body) }
+    ),
+
+  refresh: (token: string) =>
+    request<{ access_token: string }>('/api/auth/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ refresh_token: token }),
+    }),
+
+  logout: () =>
+    request<{ message: string }>('/api/auth/logout', { method: 'POST' }),
+
+  forgotPassword: (body: { email: string }) =>
+    request<{ message: string }>('/api/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  resetPassword: (body: { email: string; code: string; new_password: string }) =>
+    request<{ message: string }>('/api/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  me: () => request<User>('/api/auth/me'),
+}
+
+export interface User {
+  id: number
+  email: string
+  nickname: string
 }
 
 export interface Competition {

@@ -106,6 +106,7 @@
       </div>
     </template>
   </div>
+  <AuthModal v-model:visible="showAuthModal" />
 </template>
 
 <script setup lang="ts">
@@ -113,11 +114,15 @@ import { onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { api, type MatchDetail } from '@/api'
+import { useAuthStore } from '@/stores/auth'
 import { useSseStream } from '@/composables/useSseStream'
 import AgentViewer from '@/components/AgentViewer.vue'
 import ReportViewer from '@/components/ReportViewer.vue'
+import AuthModal from '@/components/AuthModal.vue'
 
 const { t, locale } = useI18n()
+const authStore = useAuthStore()
+const showAuthModal = ref(false)
 
 const StatCard = {
   props: ['label', 'home', 'away'],
@@ -167,6 +172,10 @@ function formatFormation(f: number) {
 }
 
 async function triggerAnalysis() {
+  if (!authStore.isLoggedIn) {
+    showAuthModal.value = true
+    return
+  }
   analyzing.value = true
   agentError.value = null
   try {

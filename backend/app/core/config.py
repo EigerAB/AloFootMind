@@ -26,6 +26,17 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     CORS_ORIGINS: str = "http://localhost:5173"
 
+    # Auth
+    JWT_SECRET: str = "change-me-in-production"
+    JWT_REFRESH_SECRET: str = "change-me-too-in-production"
+
+    # Email (SMTP)
+    SMTP_HOST: str = "smtp.163.com"
+    SMTP_PORT: int = 465
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    MAIL_FROM: str = ""
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",")]

@@ -88,6 +88,7 @@
         </div>
       </div>
     </Teleport>
+    <AuthModal v-model:visible="showAuthModal" />
   </div>
 </template>
 
@@ -95,11 +96,15 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api, type Team } from '@/api'
+import { useAuthStore } from '@/stores/auth'
 import { useSseStream } from '@/composables/useSseStream'
 import AgentViewer from '@/components/AgentViewer.vue'
 import ReportViewer from '@/components/ReportViewer.vue'
+import AuthModal from '@/components/AuthModal.vue'
 
 const { t, locale } = useI18n()
+const authStore = useAuthStore()
+const showAuthModal = ref(false)
 
 const homeQuery = ref('')
 const awayQuery = ref('')
@@ -145,6 +150,10 @@ function selectTeam(side: 'home' | 'away', team: Team) {
 }
 
 async function generateReport() {
+  if (!authStore.isLoggedIn) {
+    showAuthModal.value = true
+    return
+  }
   if (!homeTeam.value || !awayTeam.value) return
   if (homeTeam.value.team_id === awayTeam.value.team_id) {
     showSameTeamError.value = true

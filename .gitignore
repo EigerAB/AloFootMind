@@ -1,5 +1,6 @@
 openspec/
 .windsurf/
+.devin/
 .vscode
 .env
 demo-data/

@@ -23,6 +23,21 @@ const router = createRouter({
       component: () => import('@/views/ChatView.vue'),
       meta: { keepAlive: true },
     },
+    {
+      path: '/login',
+      component: () => import('@/views/LoginView.vue'),
+      meta: { guestOnly: true, noLayout: true },
+    },
+    {
+      path: '/register',
+      component: () => import('@/views/RegisterView.vue'),
+      meta: { guestOnly: true, noLayout: true },
+    },
+    {
+      path: '/forgot-password',
+      component: () => import('@/views/ForgotPasswordView.vue'),
+      meta: { guestOnly: true, noLayout: true },
+    },
   ],
 })
 

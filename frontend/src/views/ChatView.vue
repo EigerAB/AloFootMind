@@ -93,15 +93,20 @@
         </button>
       </div>
     </div>
+    <AuthModal v-model:visible="showAuthModal" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useAuthStore } from '@/stores/auth'
 import { useSseStream } from '@/composables/useSseStream'
 import { useMarkdown } from '@/composables/useMarkdown'
+import AuthModal from '@/components/AuthModal.vue'
 const { t, tm } = useI18n()
+const authStore = useAuthStore()
+const showAuthModal = ref(false)
 const localeSuggestions = computed(() => tm('chat.suggestions') as string[])
 
 interface Message {
@@ -133,6 +138,10 @@ async function scrollToBottom() {
 }
 
 async function sendMessage(text?: string) {
+  if (!authStore.isLoggedIn) {
+    showAuthModal.value = true
+    return
+  }
   const query = (text ?? inputText.value).trim()
   if (!query || isStreaming.value) return
 

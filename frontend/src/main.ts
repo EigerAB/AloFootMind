@@ -1,7 +1,25 @@
 import { createApp } from 'vue'
+import { createPinia } from 'pinia'
 import './style.css'
 import App from './App.vue'
 import router from '@/router'
 import { i18n } from '@/i18n'
+import { useAuthStore } from '@/stores/auth'
 
-createApp(App).use(router).use(i18n).mount('#app')
+const app = createApp(App)
+app.use(createPinia())
+app.use(router)
+app.use(i18n)
+
+// Hydrate auth state before mounting
+const authStore = useAuthStore()
+authStore.hydrateFromStorage()
+
+// Router guard: redirect logged-in users away from guest-only pages
+router.beforeEach((to) => {
+  if (to.meta.guestOnly && authStore.isLoggedIn) {
+    return '/matches'
+  }
+})
+
+app.mount('#app')
