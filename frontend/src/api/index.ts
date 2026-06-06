@@ -74,6 +74,7 @@ export const api = {
   getCompetitions: () => request<Competition[]>('/api/competitions'),
   getTeams: (q?: string) =>
     request<Team[]>(`/api/teams${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  getTeamsHierarchy: () => request<CompetitionWithTeams[]>('/api/teams/hierarchy'),
 
   getMatches: (params?: {
     competition_id?: number
@@ -183,6 +184,12 @@ export interface Competition {
 export interface Team {
   team_id: number
   team_name: string
+}
+
+export interface CompetitionWithTeams {
+  competition_id: number
+  competition_name: string
+  teams: Team[]
 }
 
 export interface Match {

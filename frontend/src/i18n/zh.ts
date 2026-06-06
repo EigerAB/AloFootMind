@@ -93,6 +93,8 @@ export default {
   preMatch: {
     title: '赛前情报',
     subtitle: '选择两支球队，生成战术情报报告',
+    competition: '赛事',
+    selectCompetition: '选择赛事',
     homeTeam: '主队',
     awayTeam: '客队',
     searchPlaceholder: '搜索球队...',

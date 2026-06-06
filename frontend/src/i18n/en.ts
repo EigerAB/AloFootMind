@@ -93,6 +93,8 @@ export default {
   preMatch: {
     title: 'Pre-Match Intelligence',
     subtitle: 'Select two teams to generate a tactical intelligence report',
+    competition: 'Competition',
+    selectCompetition: 'Select Competition',
     homeTeam: 'Home Team',
     awayTeam: 'Away Team',
     searchPlaceholder: 'Search team...',

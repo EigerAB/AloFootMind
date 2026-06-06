@@ -8,46 +8,56 @@
     <!-- Team selector -->
     <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-6">
       <div class="grid md:grid-cols-2 gap-4 mb-4">
+        <!-- Home -->
         <div>
+          <label class="block text-xs text-gray-500 mb-1.5">{{ t('preMatch.competition') }}</label>
+          <select
+            v-model="homeCompId"
+            @change="onCompetitionChange('home')"
+            class="w-full bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2 focus:ring-1 focus:ring-green-500 focus:outline-none mb-3"
+          >
+            <option :value="null" disabled>{{ t('preMatch.selectCompetition') }}</option>
+            <option v-for="c in hierarchy" :key="c.competition_id" :value="c.competition_id">
+              {{ c.competition_name }}
+            </option>
+          </select>
+
           <label class="block text-xs text-gray-500 mb-1.5">{{ t('preMatch.homeTeam') }}</label>
-          <input
-            v-model="homeQuery"
-            @input="searchTeams('home')"
+          <SearchableSelect
+            v-model="homeTeam"
+            :options="homeFilteredTeams"
+            :disabled="!homeCompId"
             :placeholder="t('preMatch.searchPlaceholder')"
-            class="w-full bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2 focus:ring-1 focus:ring-green-500 focus:outline-none"
+            track-key="team_id"
+            display-key="team_name"
+            @select="onTeamSelect('home')"
           />
-          <div v-if="homeSuggestions.length" class="mt-1 bg-gray-800 border border-gray-700 rounded-lg overflow-hidden max-h-40 overflow-y-auto">
-            <button
-              v-for="team in homeSuggestions"
-              :key="team.team_id"
-              @click="selectTeam('home', team)"
-              class="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors"
-            >{{ team.team_name }}</button>
-          </div>
-          <div v-if="homeTeam" class="mt-2 px-3 py-1.5 bg-green-900/30 border border-green-800/50 rounded-lg text-sm text-green-400">
-            ✓ {{ homeTeam.team_name }}
-          </div>
         </div>
 
+        <!-- Away -->
         <div>
+          <label class="block text-xs text-gray-500 mb-1.5">{{ t('preMatch.competition') }}</label>
+          <select
+            v-model="awayCompId"
+            @change="onCompetitionChange('away')"
+            class="w-full bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2 focus:ring-1 focus:ring-green-500 focus:outline-none mb-3"
+          >
+            <option :value="null" disabled>{{ t('preMatch.selectCompetition') }}</option>
+            <option v-for="c in hierarchy" :key="c.competition_id" :value="c.competition_id">
+              {{ c.competition_name }}
+            </option>
+          </select>
+
           <label class="block text-xs text-gray-500 mb-1.5">{{ t('preMatch.awayTeam') }}</label>
-          <input
-            v-model="awayQuery"
-            @input="searchTeams('away')"
+          <SearchableSelect
+            v-model="awayTeam"
+            :options="awayFilteredTeams"
+            :disabled="!awayCompId"
             :placeholder="t('preMatch.searchPlaceholder')"
-            class="w-full bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2 focus:ring-1 focus:ring-green-500 focus:outline-none"
+            track-key="team_id"
+            display-key="team_name"
+            @select="onTeamSelect('away')"
           />
-          <div v-if="awaySuggestions.length" class="mt-1 bg-gray-800 border border-gray-700 rounded-lg overflow-hidden max-h-40 overflow-y-auto">
-            <button
-              v-for="team in awaySuggestions"
-              :key="team.team_id"
-              @click="selectTeam('away', team)"
-              class="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors"
-            >{{ team.team_name }}</button>
-          </div>
-          <div v-if="awayTeam" class="mt-2 px-3 py-1.5 bg-blue-900/30 border border-blue-800/50 rounded-lg text-sm text-blue-400">
-            ✓ {{ awayTeam.team_name }}
-          </div>
         </div>
       </div>
 
@@ -93,25 +103,28 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { api, type Team } from '@/api'
+import { api, type Team, type CompetitionWithTeams } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { useSseStream } from '@/composables/useSseStream'
 import AgentViewer from '@/components/AgentViewer.vue'
 import ReportViewer from '@/components/ReportViewer.vue'
 import AuthModal from '@/components/AuthModal.vue'
+import SearchableSelect from '@/components/SearchableSelect.vue'
 
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
 const showAuthModal = ref(false)
 
-const homeQuery = ref('')
-const awayQuery = ref('')
-const homeSuggestions = ref<Team[]>([])
-const awaySuggestions = ref<Team[]>([])
+const hierarchy = ref<CompetitionWithTeams[]>([])
+
+const homeCompId = ref<number | null>(null)
 const homeTeam = ref<Team | null>(null)
+
+const awayCompId = ref<number | null>(null)
 const awayTeam = ref<Team | null>(null)
+
 const isRunning = ref(false)
 const stepLog = ref<any[]>([])
 const report = ref<string | null>(null)
@@ -120,33 +133,30 @@ const showSameTeamError = ref(false)
 
 const { start: startSse, stop: stopSse } = useSseStream()
 
-let searchTimer: ReturnType<typeof setTimeout>
+const homeFilteredTeams = computed(() => {
+  const comp = hierarchy.value.find(c => c.competition_id === homeCompId.value)
+  return comp?.teams ?? []
+})
 
-async function searchTeams(side: 'home' | 'away') {
-  const query = side === 'home' ? homeQuery.value : awayQuery.value
-  if (query.length < 2) {
-    if (side === 'home') homeSuggestions.value = []
-    else awaySuggestions.value = []
-    return
+const awayFilteredTeams = computed(() => {
+  const comp = hierarchy.value.find(c => c.competition_id === awayCompId.value)
+  return comp?.teams ?? []
+})
+
+onMounted(async () => {
+  hierarchy.value = await api.getTeamsHierarchy().catch(() => [])
+})
+
+function onCompetitionChange(side: 'home' | 'away') {
+  if (side === 'home') {
+    homeTeam.value = null
+  } else {
+    awayTeam.value = null
   }
-  clearTimeout(searchTimer)
-  searchTimer = setTimeout(async () => {
-    const results = await api.getTeams(query).catch(() => [])
-    if (side === 'home') homeSuggestions.value = results.slice(0, 8)
-    else awaySuggestions.value = results.slice(0, 8)
-  }, 300)
 }
 
-function selectTeam(side: 'home' | 'away', team: Team) {
-  if (side === 'home') {
-    homeTeam.value = team
-    homeQuery.value = team.team_name
-    homeSuggestions.value = []
-  } else {
-    awayTeam.value = team
-    awayQuery.value = team.team_name
-    awaySuggestions.value = []
-  }
+function onTeamSelect(_side: 'home' | 'away') {
+  // v-model handles the value; this hook can be used for side-effects if needed
 }
 
 async function generateReport() {
