@@ -110,6 +110,10 @@ export default {
     limitMsg: 'You can save up to 5 reports. Continuing will delete the oldest report: {oldest}',
     cancel: 'Cancel',
     confirm: 'Confirm',
+    deleteConfirmTitle: 'Confirm Delete',
+    deleteConfirmMsg: 'Are you sure you want to delete the report for {home} vs {away}?',
+    clearConfirmTitle: 'Confirm Clear',
+    clearConfirmMsg: 'Are you sure you want to clear all history reports? This action cannot be undone.',
   },
   chat: {
     title: 'AI Football Chat',

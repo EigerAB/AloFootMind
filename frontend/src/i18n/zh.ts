@@ -110,6 +110,10 @@ export default {
     limitMsg: '您最多可保存 5 份报告。继续生成将删除最早的报告：{oldest}',
     cancel: '取消',
     confirm: '确认',
+    deleteConfirmTitle: '确认删除',
+    deleteConfirmMsg: '确定要删除 {home} vs {away} 的报告吗？',
+    clearConfirmTitle: '确认清空',
+    clearConfirmMsg: '确定要清空所有历史报告吗？此操作不可恢复。',
   },
   chat: {
     title: 'AI 足球问答',

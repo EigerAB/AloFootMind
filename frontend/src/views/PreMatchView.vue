@@ -80,7 +80,7 @@
       <div class="flex items-center justify-between mb-4">
         <h3 class="text-sm font-semibold text-gray-300">{{ t('preMatch.historyTitle') }}</h3>
         <button
-          @click="clearAllReports"
+          @click="showClearAllConfirm"
           class="text-xs text-red-400 hover:text-red-300 transition-colors px-2 py-1 rounded hover:bg-red-900/20"
         >
           {{ t('preMatch.clearAll') }}
@@ -104,7 +104,7 @@
             </div>
             <div class="flex items-center gap-2 shrink-0 ml-2">
               <button
-                @click.stop="deleteReport(r.id)"
+                @click.stop="showDeleteConfirm(r.id, r.home_team_name, r.away_team_name)"
                 class="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded hover:bg-red-900/20 transition-colors"
               >
                 {{ t('preMatch.delete') }}
@@ -184,6 +184,13 @@
     </Teleport>
 
     <AuthModal v-model:visible="showAuthModal" />
+
+    <ConfirmDialog
+      v-model:visible="showConfirmDialog"
+      :title="confirmDialogTitle"
+      :message="confirmDialogMessage"
+      @confirm="onConfirmAction"
+    />
   </div>
 </template>
 
@@ -196,6 +203,7 @@ import { useSseStream } from '@/composables/useSseStream'
 import AgentViewer from '@/components/AgentViewer.vue'
 import ReportViewer from '@/components/ReportViewer.vue'
 import AuthModal from '@/components/AuthModal.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 
 const { t, locale } = useI18n()
@@ -223,6 +231,11 @@ const oldestReport = ref<PreMatchReport | null>(null)
 
 const agentViewerRef = ref<HTMLElement | null>(null)
 
+const showConfirmDialog = ref(false)
+const confirmDialogTitle = ref('')
+const confirmDialogMessage = ref('')
+const confirmAction = ref<(() => void) | null>(null)
+
 const { start: startSse, stop: stopSse } = useSseStream()
 
 const homeFilteredTeams = computed(() => {
@@ -246,13 +259,32 @@ async function loadReports() {
   reportHistory.value = await api.getPreMatchReports().catch(() => [])
 }
 
-async function deleteReport(id: number) {
+function showDeleteConfirm(id: number, home: string, away: string) {
+  confirmDialogTitle.value = t('preMatch.deleteConfirmTitle')
+  confirmDialogMessage.value = t('preMatch.deleteConfirmMsg', { home, away })
+  confirmAction.value = () => executeDelete(id)
+  showConfirmDialog.value = true
+}
+
+function showClearAllConfirm() {
+  confirmDialogTitle.value = t('preMatch.clearConfirmTitle')
+  confirmDialogMessage.value = t('preMatch.clearConfirmMsg')
+  confirmAction.value = executeClearAll
+  showConfirmDialog.value = true
+}
+
+function onConfirmAction() {
+  confirmAction.value?.()
+  confirmAction.value = null
+}
+
+async function executeDelete(id: number) {
   await api.deletePreMatchReport(id).catch(() => {})
   await loadReports()
   if (expandedReportId.value === id) expandedReportId.value = null
 }
 
-async function clearAllReports() {
+async function executeClearAll() {
   await api.clearPreMatchReports().catch(() => {})
   await loadReports()
   expandedReportId.value = null
