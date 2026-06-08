@@ -17,6 +17,7 @@
           <p class="text-gray-400 text-sm mb-5">{{ message }}</p>
           <div class="flex gap-2">
             <button
+              v-if="cancelText"
               @click="close"
               class="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm font-semibold rounded-lg transition-colors"
             >

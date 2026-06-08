@@ -1,3 +1,8 @@
+function getAuthHeader(): Record<string, string> {
+  const token = localStorage.getItem('access_token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 export interface SseStreamOptions {
   onEvent: (data: Record<string, unknown>) => void
   onDone: (data: Record<string, unknown>) => void
@@ -39,9 +44,15 @@ export function useSseStream() {
         headers: {
           'Content-Type': 'application/json',
           Accept: 'text/event-stream',
+          ...getAuthHeader(),
         },
         body: JSON.stringify(body),
       })
+      if (!res.ok) {
+        const text = await res.text().catch(() => 'Request failed')
+        options.onError(text || `HTTP ${res.status}`)
+        return
+      }
       await _readStream(res, options)
     } catch (err: unknown) {
       if ((err as Error)?.name !== 'AbortError') {
@@ -59,6 +70,7 @@ export function useSseStream() {
     const reader = res.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
+    let gotEvent = false
 
     while (true) {
       const { done, value } = await reader.read()
@@ -80,6 +92,7 @@ export function useSseStream() {
         }
 
         if (!dataLine) continue
+        gotEvent = true
 
         try {
           const parsed = JSON.parse(dataLine)
@@ -100,6 +113,11 @@ export function useSseStream() {
           // malformed SSE chunk — skip
         }
       }
+    }
+
+    // Stream ended without explicit done/error event
+    if (!gotEvent) {
+      options.onError('Stream ended unexpectedly')
     }
   }
 

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 from sqlalchemy import (
     BigInteger, Boolean, Column, DateTime, Float, ForeignKey,
-    Integer, String, Text, UniqueConstraint, func
+    Integer, JSON, String, Text, UniqueConstraint, func
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -141,6 +141,20 @@ class AnalysisReport(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now()
     )
+
+
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    messages: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
+    qa_meta: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=lambda: {"football_intent_count": 0, "generic_turn_count": 0}
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
 class IngestionLog(Base):

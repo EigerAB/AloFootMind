@@ -133,6 +133,33 @@ export const api = {
   clearPreMatchReports: () =>
     request<{ message: string }>('/api/pre-match/reports', { method: 'DELETE' }),
 
+  // Chat sessions
+  getChatSessions: () =>
+    request<ChatSession[]>('/api/chat/sessions'),
+
+  createChatSession: (name?: string, initialMessage?: string) =>
+    request<{ id: number; name: string }>('/api/chat/sessions', {
+      method: 'POST',
+      body: JSON.stringify({ name: name ?? null, initial_message: initialMessage ?? null }),
+    }),
+
+  renameChatSession: (id: number, name: string) =>
+    request<{ message: string }>(`/api/chat/sessions/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    }),
+
+  cancelChatSession: (id: number) =>
+    request<{ ok: boolean }>(`/api/chat/sessions/${id}/cancel`, { method: 'POST' }),
+
+  deleteChatSession: (id: number) =>
+    request<{ message: string }>(`/api/chat/sessions/${id}`, { method: 'DELETE' }),
+
+  loadChatSession: (id: number) =>
+    request<{ id: number; name: string; messages: ChatMessage[]; qa_meta: QaMeta }>(
+      `/api/chat/sessions/${id}`
+    ).catch(() => null),
+
   // Auth
   register: (body: { email: string; password: string; nickname: string }) =>
     request<{ message: string }>('/api/auth/register', {
@@ -209,6 +236,24 @@ export interface PreMatchReport {
   away_team_name: string
   report_markdown: string
   created_at: string
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+  sources?: { text: string; collection: string }[]
+}
+
+export interface QaMeta {
+  football_intent_count: number
+  generic_turn_count: number
+}
+
+export interface ChatSession {
+  id: number
+  name: string
+  updated_at: string
+  preview: string
 }
 
 export interface Match {

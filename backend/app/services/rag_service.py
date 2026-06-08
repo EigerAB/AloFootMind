@@ -4,6 +4,7 @@ Classify query → build metadata filter → Hybrid Search (Dense+Sparse) → Re
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import re
@@ -260,7 +261,19 @@ async def retrieve(
             continue
 
         try:
-            hits = _hybrid_search(collection_name, query, top_k, milvus_filter)
+            loop = asyncio.get_event_loop()
+            hits = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None, _hybrid_search, collection_name, query, top_k, milvus_filter
+                ),
+                timeout=20.0,
+            )
+        except asyncio.TimeoutError:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "[RAG] hybrid_search timed out for %s", collection_name
+            )
+            hits = []
         except Exception as e:
             import logging as _logging
             _logging.getLogger(__name__).warning(

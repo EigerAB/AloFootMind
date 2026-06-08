@@ -1,6 +1,7 @@
 """QA Sub-graph: query_classify → rag_retrieval → answer_generation (streaming)."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from typing import AsyncGenerator
@@ -82,6 +83,7 @@ def _deepseek_llm(stream: bool = False) -> ChatOpenAI:
         temperature=0.4,
         max_tokens=1200,
         streaming=stream,
+        request_timeout=25,
     )
 
 
@@ -125,8 +127,9 @@ Output ONLY the rewritten query text, nothing else."""
                 base_url=DEEPSEEK_BASE,
                 temperature=0.1,
                 max_tokens=100,
+                request_timeout=15,
             )
-            resp = await llm.ainvoke([HumanMessage(content=prompt)])
+            resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=prompt)]), timeout=15.0)
             if resp.content:
                 rewritten = resp.content.strip().strip('"').strip("'")
 
@@ -427,6 +430,35 @@ Format your answers in clear Markdown."""
         return {"step_log": step_log, "error": str(e)}
 
 
+def _extract_user_profile(conversation_history: list[dict]) -> str:
+    """Scan full history for user-stated personal facts (name, role, preferences)."""
+    facts: list[str] = []
+    name_patterns = [r"我叫(\S+)", r"我的名字(?:是|叫)(\S+)", r"my name is (\w+)", r"i['']m (\w+),?\s*(a|an)?"]
+    role_patterns = [r"我是(?:一名|一个)?(.{2,20}?)[，,。\s]", r"i(?:'m| am) (?:a |an )?(.{2,30}?)(?:[,.]|$)"]
+    for turn in conversation_history:
+        if turn.get("role") != "user":
+            continue
+        content = turn.get("content", "")
+        for pat in name_patterns:
+            m = re.search(pat, content, re.IGNORECASE)
+            if m:
+                facts.append(f"用户姓名：{m.group(1).strip()}")
+                break
+        for pat in role_patterns:
+            m = re.search(pat, content, re.IGNORECASE)
+            if m:
+                role = m.group(1).strip().rstrip("，。,.").strip()
+                if role:
+                    facts.append(f"用户身份：{role}")
+                break
+    # Deduplicate keeping last occurrence of each fact type
+    seen: dict[str, str] = {}
+    for f in facts:
+        key = f.split("：")[0]
+        seen[key] = f
+    return "\n".join(seen.values())
+
+
 async def stream_answer(
     query: str,
     rag_context: list[dict],
@@ -444,8 +476,12 @@ async def stream_answer(
         user_content = f"Question: {query}"
         has_rag = False
 
+    # Extract user profile from full history and pin it into system prompt
+    user_profile = _extract_user_profile(conversation_history or [])
+    profile_section = f"\n\n【用户信息（始终记住）】\n{user_profile}" if user_profile else ""
+
     if language == "zh":
-        system_prompt = """你是 AloFootMind，一位专业的足球数据分析 AI 助手。
+        system_prompt = f"""你是 AloFootMind，一位专业的足球数据分析 AI 助手。{profile_section}
 
 你有两个信息来源：
 1. RAG 上下文：从知识库检索到的足球数据（可能为空）。
@@ -454,14 +490,14 @@ async def stream_answer(
 
 2. 对话历史：本轮对话中用户告诉你的信息。
    - 你应该记住用户提到的个人信息（姓名、身份、偏好）。
-   - 回答用户关于自己的问题时，从对话历史中提取，不要用"根据提供的上下文"。
+   - 回答用户关于自己的问题时，优先从【用户信息】区块提取，不要用"根据提供的上下文"。
 
 数据边界：你目前仅有 2023/2024 赛季男子德甲联赛的数据。
 如果被问到其他联赛或赛季，请礼貌说明数据范围。
 
 请用 Markdown 格式回复。"""
     else:
-        system_prompt = """You are AloFootMind, an expert AI football analyst.
+        system_prompt = f"""You are AloFootMind, an expert AI football analyst.{profile_section}
 
 You have access to two sources of information:
 1. RAG CONTEXT: Football knowledge retrieved from the database (may be empty).
@@ -470,8 +506,8 @@ You have access to two sources of information:
 
 2. CONVERSATION HISTORY: Previous messages in this conversation.
    - Remember personal facts the user told you (name, role, preferences).
-   - When answering questions about the user, extract from conversation history.
-     Do NOT say "based on the provided context" when referring to conversation history.
+   - When answering questions about the user, extract from the user profile above.
+     Do NOT say "based on the provided context" when referring to user facts.
 
 Data boundary: You only have data for the 2023/2024 Bundesliga season.
 If asked about other leagues or seasons, politely state this limitation.
@@ -479,7 +515,7 @@ If asked about other leagues or seasons, politely state this limitation.
 Format your answers in clear Markdown."""
 
     messages: list = [SystemMessage(content=system_prompt)]
-    for turn in (conversation_history or [])[-5:]:
+    for turn in (conversation_history or [])[-20:]:
         if turn.get("role") == "user":
             messages.append(HumanMessage(content=turn["content"]))
         elif turn.get("role") == "assistant":
@@ -494,6 +530,7 @@ Format your answers in clear Markdown."""
     async for chunk in llm.astream(messages):
         if chunk.content:
             yield chunk.content
+        await asyncio.sleep(0)  # yield control to event loop
 
 
 def _route(state: AnalysisState) -> str:

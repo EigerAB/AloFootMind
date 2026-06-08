@@ -21,7 +21,12 @@ const router = createRouter({
     {
       path: '/chat',
       component: () => import('@/views/ChatView.vue'),
-      meta: { keepAlive: true },
+      meta: { keepAlive: true, keepAliveKey: 'chat' },
+    },
+    {
+      path: '/chat/:id',
+      component: () => import('@/views/ChatView.vue'),
+      meta: { keepAlive: true, keepAliveKey: 'chat' },
     },
     {
       path: '/login',

@@ -1,9 +1,18 @@
 <template>
   <div class="flex flex-col h-screen">
     <!-- Header -->
-    <div class="bg-gray-900 border-b border-gray-800 px-6 py-4 shrink-0">
-      <h2 class="text-lg font-bold text-white">{{ t('chat.title') }}</h2>
-      <p class="text-xs text-gray-500 mt-0.5">{{ t('chat.subtitle') }}</p>
+    <div class="bg-gray-900 border-b border-gray-800 px-6 py-4 shrink-0 flex items-center justify-between">
+      <div>
+        <h2 class="text-lg font-bold text-white">{{ t('chat.title') }}</h2>
+        <p class="text-xs text-gray-500 mt-0.5">{{ t('chat.subtitle') }}</p>
+      </div>
+      <button
+        @click="startNewChat"
+        class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-lg transition-colors flex items-center gap-1.5"
+      >
+        <span>➕</span>
+        {{ t('chat.newChat') }}
+      </button>
     </div>
 
     <!-- Messages -->
@@ -27,8 +36,14 @@
 
       <!-- Messages -->
       <template v-for="(msg, i) in messages" :key="i">
+        <!-- System message -->
+        <div v-if="msg.role === 'system'" class="flex items-center gap-3 py-1">
+          <div class="flex-1 h-px bg-gray-800"></div>
+          <span class="text-xs text-gray-600 italic shrink-0">{{ t('chat.userCancelled') }}</span>
+          <div class="flex-1 h-px bg-gray-800"></div>
+        </div>
         <!-- User message -->
-        <div v-if="msg.role === 'user'" class="flex justify-end">
+        <div v-else-if="msg.role === 'user'" class="flex justify-end">
           <div class="bg-green-800 text-white text-sm rounded-2xl rounded-tr-sm px-4 py-3 max-w-lg">
             {{ msg.content }}
           </div>
@@ -85,11 +100,19 @@
           class="flex-1 bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-xl px-4 py-3 focus:ring-1 focus:ring-green-500 focus:outline-none disabled:opacity-50"
         />
         <button
+          v-if="!isStreaming"
           @click="sendMessage()"
-          :disabled="!inputText.trim() || isStreaming"
+          :disabled="!inputText.trim()"
           class="px-5 py-3 bg-green-700 hover:bg-green-600 disabled:opacity-40 text-white rounded-xl transition-colors font-medium"
         >
           {{ t('chat.sendBtn') }}
+        </button>
+        <button
+          v-else
+          @click="abortStream"
+          class="px-5 py-3 bg-red-700 hover:bg-red-600 text-white rounded-xl transition-colors font-medium"
+        >
+          {{ t('chat.stop') }}
         </button>
       </div>
     </div>
@@ -98,19 +121,26 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
+import { useChatStore } from '@/stores/chat'
 import { useSseStream } from '@/composables/useSseStream'
 import { useMarkdown } from '@/composables/useMarkdown'
+import { api, type ChatMessage, type QaMeta } from '@/api'
 import AuthModal from '@/components/AuthModal.vue'
+
 const { t, tm } = useI18n()
 const authStore = useAuthStore()
+const chatStore = useChatStore()
+const route = useRoute()
+const router = useRouter()
 const showAuthModal = ref(false)
 const localeSuggestions = computed(() => tm('chat.suggestions') as string[])
 
 interface Message {
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'system'
   content: string
   sources?: { text: string; collection: string }[]
 }
@@ -121,20 +151,86 @@ const isStreaming = ref(false)
 const streamBuffer = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
 
+const sessionId = computed(() => {
+  const id = route.params.id
+  return id ? Number(id) : null
+})
+
 // qa_meta for cross-turn football-intent tracking
-const qaMeta = ref<{ football_intent_count: number; generic_turn_count: number }>({
+const qaMeta = ref<QaMeta>({
   football_intent_count: 0,
   generic_turn_count: 0,
 })
 
-const { post: postSse } = useSseStream()
+const streamingSessionId = ref<number | null>(null)
+
+const { post: postSse, stop: stopSse } = useSseStream()
 const { render: renderMarkdown } = useMarkdown()
 
-async function scrollToBottom() {
-  await nextTick()
-  if (messagesContainer.value) {
-    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+async function loadSession(id: number) {
+  const res = await api.loadChatSession(id)
+  if (res) {
+    messages.value = res.messages.map((m: ChatMessage) => ({
+      role: m.role,
+      content: m.content,
+      sources: m.sources,
+    }))
+    qaMeta.value = res.qa_meta
+  } else {
+    messages.value = []
+    qaMeta.value = { football_intent_count: 0, generic_turn_count: 0 }
   }
+}
+
+watch(
+  () => route.params.id,
+  async (newId, oldId) => {
+    // Abort only when navigating away from the session that is currently streaming
+    if (isStreaming.value && newId !== oldId) {
+      abortStream()
+      // Fire-and-forget: write cancel system message to DB so user sees it on return
+      if (streamingSessionId.value) {
+        api.cancelChatSession(streamingSessionId.value).catch(() => {})
+      }
+    }
+    if (newId) {
+      await loadSession(Number(newId))
+    } else {
+      messages.value = []
+      qaMeta.value = { football_intent_count: 0, generic_turn_count: 0 }
+    }
+  },
+  { immediate: true }
+)
+
+onMounted(() => {
+  if (authStore.isLoggedIn) {
+    chatStore.loadSessions()
+  }
+})
+
+function scrollToBottom() {
+  nextTick(() => {
+    if (messagesContainer.value) {
+      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    }
+  })
+}
+
+// Keep scroll pinned to bottom whenever content changes
+watch([messages, streamBuffer, isStreaming], scrollToBottom)
+
+function abortStream() {
+  stopSse()
+  isStreaming.value = false
+  streamBuffer.value = ''
+}
+
+async function startNewChat() {
+  if (isStreaming.value) {
+    abortStream()
+  }
+  router.push('/chat')
 }
 
 async function sendMessage(text?: string) {
@@ -147,7 +243,15 @@ async function sendMessage(text?: string) {
 
   inputText.value = ''
   messages.value.push({ role: 'user', content: query })
-  await scrollToBottom()
+
+  // If new chat (no session yet), create session immediately so sidebar updates at once
+  let currentSessionId = sessionId.value
+  if (!currentSessionId) {
+    const newSession = await api.createChatSession(query.slice(0, 30), query)
+    currentSessionId = newSession.id
+    chatStore.loadSessions()
+  }
+  streamingSessionId.value = currentSessionId
 
   const history = messages.value
     .filter(m => m.role !== 'user' || m.content !== query)
@@ -163,18 +267,16 @@ async function sendMessage(text?: string) {
       {
         query,
         conversation_history: history,
-        session_id: 'ui-session',
+        session_id: currentSessionId,
         qa_meta: qaMeta.value,
       },
       {
         onToken: (token: string) => {
           streamBuffer.value += token
-          scrollToBottom()
         },
         onEvent: (data) => {
           if ((data as any).token) {
             streamBuffer.value += (data as any).token
-            scrollToBottom()
           }
         },
         onDone: (data) => {
@@ -187,9 +289,18 @@ async function sendMessage(text?: string) {
           if ((data as any).qa_meta) {
             qaMeta.value = (data as any).qa_meta
           }
+          // Update route if new session created
+          const returnedSessionId = (data as any).session_id
+          if (returnedSessionId && !sessionId.value) {
+            router.replace(`/chat/${returnedSessionId}`)
+          }
+          // Refresh session list in sidebar
+          if (authStore.isLoggedIn) {
+            chatStore.loadSessions()
+          }
           streamBuffer.value = ''
           isStreaming.value = false
-          scrollToBottom()
+          streamingSessionId.value = null
         },
         onError: (err) => {
           messages.value.push({
@@ -198,7 +309,7 @@ async function sendMessage(text?: string) {
           })
           streamBuffer.value = ''
           isStreaming.value = false
-          scrollToBottom()
+          streamingSessionId.value = null
         },
       }
     )

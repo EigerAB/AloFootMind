@@ -16,7 +16,7 @@ const noLayout = computed(() => !!route.meta.noLayout)
   <AppLayout v-else>
     <RouterView v-slot="{ Component, route: r }">
       <KeepAlive>
-        <component :is="Component" v-if="r.meta.keepAlive" :key="r.path" />
+        <component :is="Component" v-if="r.meta.keepAlive" :key="(r.meta.keepAliveKey as string) ?? r.path" />
       </KeepAlive>
       <component :is="Component" v-if="!r.meta.keepAlive" :key="r.fullPath" />
     </RouterView>
