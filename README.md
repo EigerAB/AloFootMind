@@ -6,10 +6,11 @@
 
 | 层 | 技术 |
 |---|---|
-| 前端 | Vue3 + TypeScript + TailwindCSS + Fetch SSE + markdown-it |
-| 后端 | Python + FastAPI |
-| 存储 | PostgreSQL + Redis + Milvus |
-| AI | LangGraph + LangChain + DeepSeek + GPT-4o + BAAI/bge-m3 |
+| 前端 | Vue 3.5 + TypeScript + Vite + TailwindCSS + Vue Router + Pinia + vue-i18n |
+| 后端 | Python 3.12 + FastAPI + SQLAlchemy（异步） |
+| 存储 | PostgreSQL 16 + Redis + Milvus 2.4 |
+| AI | LangGraph + LangChain + DeepSeek + BAAI/bge-m3 |
+| 认证 | JWT（access + refresh）+ bcrypt + 邮箱验证 |
 
 ## 快速启动
 
@@ -23,32 +24,31 @@ docker-compose up -d
 
 ```bash
 cp backend/.env.example backend/.env
-# 编辑 .env，填入 API keys 和 StatsBomb 数据路径
+# 编辑 .env，填入 API keys、数据库连接和 StatsBomb 数据路径
 ```
 
 ### 3. 安装后端依赖
 
 ```bash
 cd backend
-python -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
-pip install -r requirements.txt
+# 推荐使用 uv（已根据 pyproject.toml + uv.lock 锁定依赖）
+uv sync
 ```
 
 ### 4. 初始化数据库 & 导入数据
 
 ```bash
 # 初始化 PostgreSQL 表结构和 Milvus Collections
-python -m app.db.init
+uv run python -c "import asyncio; from app.db.postgres import init_db; asyncio.run(init_db())"
 
 # 导入 StatsBomb 数据（以英超为例，competition_id=2）
-python scripts/ingest.py --competition_id 2
+uv run python scripts/ingest.py --competition_id 2
 ```
 
 ### 5. 启动后端
 
 ```bash
-uvicorn app.main:app --reload --port 8000
+uv run uvicorn app.main:app --reload --port 8000
 ```
 
 ### 6. 启动前端
@@ -63,30 +63,44 @@ npm run dev
 
 ## 核心功能
 
-- **赛后复盘**：选择一场比赛，触发 AI 战术分析，实时查看 Agent 执行进度
+- **赛后复盘**：选择一场比赛，触发 AI 战术分析，实时查看 Agent 执行进度（SSE 流式推送）
 - **对阵情报**：选择两支球队，生成基于历史数据的战前情报报告
-- **智能问答**：自然语言查询足球数据，RAG 驱动精准回答
+- **智能问答**：自然语言查询足球数据，RAG 驱动精准回答，支持多轮对话
+- **用户认证**：注册/登录/邮箱验证/密码重置，JWT 双 Token 机制
+- **聊天历史**：最多保存 10 条会话，支持重命名、删除和中断流式回答
+- **多语言**：中文/英文切换
 
 ## 项目结构
 
 ```
 AloFootMind/
-├── backend/
+├── backend/              # FastAPI 后端
 │   ├── app/
-│   │   ├── api/          # FastAPI 路由
-│   │   ├── agents/       # LangGraph Agent 定义
-│   │   ├── etl/          # 数据管道
-│   │   ├── db/           # 数据库模型与连接
-│   │   └── services/     # RAG、存储等服务
+│   │   ├── api/          # FastAPI 路由（比赛、分析、认证、聊天）
+│   │   ├── agents/       # LangGraph 多智能体定义（赛前/赛后/问答子图）
+│   │   ├── core/         # 配置（Pydantic Settings）
+│   │   ├── db/           # 数据库模型、连接、迁移
+│   │   ├── etl/          # StatsBomb 数据解析与三层 RAG 语料生成
+│   │   └── services/     # RAG 检索、嵌入、LLM 客户端
 │   ├── scripts/
-│   │   └── ingest.py     # ETL CLI
+│   │   ├── ingest.py     # ETL CLI（全量/增量导入）
+│   │   └── seed_mock.py  # Mock 数据种子
+│   ├── alembic/          # 数据库迁移
 │   ├── .env.example
-│   └── requirements.txt
-├── frontend/
+│   ├── pyproject.toml
+│   └── uv.lock
+├── frontend/             # Vue 3 前端
 │   └── src/
+│       ├── api/          # API 客户端（含自动刷新 Token）
+│       ├── components/   # 通用组件（布局、模态框、确认对话框）
+│       ├── composables/  # Vue3 组合式函数（SSE、Markdown）
+│       ├── i18n/         # 国际化（zh / en）
+│       ├── router/       # 路由配置
+│       ├── stores/       # Pinia 状态管理（auth、chat）
 │       ├── views/        # 页面组件
-│       ├── components/   # 通用组件
-│       ├── composables/  # Vue3 组合式函数
-│       └── api/          # API 客户端
-└── docker-compose.yml
+│       └── main.ts       # 入口文件
+├── openspec/             # OpenSpec 变更管理
+│   └── changes/
+│       └── archive/      # 已归档的变更
+└── docker-compose.yml    # 基础设施编排（Postgres + Redis + Milvus）
 ```

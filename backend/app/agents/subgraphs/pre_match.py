@@ -5,14 +5,11 @@ import json
 import logging
 
 from langchain_core.messages import HumanMessage
-from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph
-
-DEEPSEEK_BASE = "https://api.deepseek.com/v1"
 
 from app.agents.state import AnalysisState
 from app.agents.utils import extract_key_players, llm_retry, push_step, set_task_result, set_task_status
-from app.core.config import settings
+from app.services.llm_client import get_deepseek_llm
 from app.services.rag_service import retrieve
 
 logger = logging.getLogger(__name__)
@@ -68,14 +65,6 @@ def _msg(node: str, key: str, lang: str, **kwargs: object) -> str:
     return tmpl.format(**kwargs) if kwargs else tmpl
 
 
-def _deepseek() -> ChatOpenAI:
-    return ChatOpenAI(
-        model="deepseek-chat",
-        api_key=settings.DEEPSEEK_API_KEY,
-        base_url=DEEPSEEK_BASE,
-        temperature=0.3,
-        max_tokens=2000,
-    )
 
 
 async def fetch_team_history(state: AnalysisState) -> dict:
@@ -287,7 +276,7 @@ async def rag_retrieval(state: AnalysisState) -> dict:
 async def _call_matchup_analysis(
     ar: dict, rag_context: list[dict], language: str = "en"
 ) -> str:
-    llm = _deepseek()
+    llm = get_deepseek_llm()
     teams = ar.get("teams", {})
     home_id = ar.get("home_id")
     away_id = ar.get("away_id")

@@ -8,21 +8,8 @@ import json
 from collections import defaultdict
 from typing import Any
 
-from openai import AsyncOpenAI
-
 from app.core.config import settings
-
-_deepseek_client: AsyncOpenAI | None = None
-
-
-def _get_deepseek() -> AsyncOpenAI:
-    global _deepseek_client
-    if _deepseek_client is None:
-        _deepseek_client = AsyncOpenAI(
-            api_key=settings.DEEPSEEK_API_KEY,
-            base_url="https://api.deepseek.com/v1",
-        )
-    return _deepseek_client
+from app.services.llm_client import get_deepseek_client
 
 
 # ─────────────────────────────────────────────
@@ -168,9 +155,9 @@ Disciplinary events:
 Write a natural language summary covering: match overview, key moments, tactical observations. 
 Do NOT fabricate statistics not provided. Be factual and analytical."""
 
-    client = _get_deepseek()
+    client = get_deepseek_client()
     response = await client.chat.completions.create(
-        model="deepseek-chat",
+        model=settings.DEEPSEEK_MODEL,
         messages=[{"role": "user", "content": prompt}],
         max_tokens=800,
         temperature=0.3,
@@ -211,9 +198,9 @@ Season statistics (derived from match events):
 Write a profile describing the player's style, strengths, and season performance. 
 Be analytical. Do NOT fabricate information beyond what is provided."""
 
-    client = _get_deepseek()
+    client = get_deepseek_client()
     response = await client.chat.completions.create(
-        model="deepseek-chat",
+        model=settings.DEEPSEEK_MODEL,
         messages=[{"role": "user", "content": prompt}],
         max_tokens=600,
         temperature=0.3,

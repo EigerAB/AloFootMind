@@ -7,19 +7,16 @@ import re
 from typing import AsyncGenerator
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph
 from sqlalchemy import text
 
 from app.agents.state import AnalysisState
 from app.agents.utils import llm_retry, push_step
-from app.core.config import settings
 from app.db.postgres import AsyncSessionLocal
+from app.services.llm_client import get_deepseek_llm
 from app.services.rag_service import classify_query, retrieve
 
 logger = logging.getLogger(__name__)
-
-DEEPSEEK_BASE = "https://api.deepseek.com/v1"
 
 # ─────────────────────────────────────────────
 #  Entity Dictionary (teams + players from DB)
@@ -75,16 +72,6 @@ def _match_entities(query: str) -> list[dict]:
     return found
 
 
-def _deepseek_llm(stream: bool = False) -> ChatOpenAI:
-    return ChatOpenAI(
-        model="deepseek-chat",
-        api_key=settings.DEEPSEEK_API_KEY,
-        base_url=DEEPSEEK_BASE,
-        temperature=0.4,
-        max_tokens=1200,
-        streaming=stream,
-        request_timeout=25,
-    )
 
 
 async def query_rewrite(state: AnalysisState) -> dict:
@@ -121,10 +108,7 @@ Task:
 
 Output ONLY the rewritten query text, nothing else."""
 
-            llm = ChatOpenAI(
-                model="deepseek-chat",
-                api_key=settings.DEEPSEEK_API_KEY,
-                base_url=DEEPSEEK_BASE,
+            llm = get_deepseek_llm(
                 temperature=0.1,
                 max_tokens=100,
                 request_timeout=15,
@@ -306,7 +290,7 @@ You can answer tactical analysis, player stats, and match intelligence questions
                 messages.append(AIMessage(content=turn["content"]))
         messages.append(HumanMessage(content=query))
 
-        llm = _deepseek_llm(stream=False)
+        llm = get_deepseek_llm(streaming=False, temperature=0.4, max_tokens=1200, request_timeout=25)
         response = await llm.ainvoke(messages)
 
         step_log = await push_step(state, node, "completed", "Boundary hint generated.")
@@ -343,7 +327,7 @@ async def direct_answer(state: AnalysisState) -> dict:
                 messages.append(AIMessage(content=turn["content"]))
         messages.append(HumanMessage(content=query))
 
-        llm = _deepseek_llm(stream=False)
+        llm = get_deepseek_llm(streaming=False, temperature=0.4, max_tokens=1200, request_timeout=25)
         response = await llm.ainvoke(messages)
 
         step_log = await push_step(state, node, "completed", "Direct answer generated.")
@@ -418,7 +402,7 @@ Format your answers in clear Markdown."""
 
         messages.append(HumanMessage(content=user_content))
 
-        llm = _deepseek_llm(stream=False)
+        llm = get_deepseek_llm(streaming=False, temperature=0.4, max_tokens=1200, request_timeout=25)
         response = await llm.ainvoke(messages)
         answer = response.content
 
@@ -526,7 +510,7 @@ Format your answers in clear Markdown."""
 
     messages.append(HumanMessage(content=user_content))
 
-    llm = _deepseek_llm(stream=True)
+    llm = get_deepseek_llm(streaming=True, temperature=0.4, max_tokens=1200, request_timeout=25)
     async for chunk in llm.astream(messages):
         if chunk.content:
             yield chunk.content

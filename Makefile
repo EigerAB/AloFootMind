@@ -25,13 +25,13 @@ restart: ## Restart all services
 # ─── Backend ──────────────────────────────────────────────────────────────────
 
 install-backend: ## Install Python dependencies
-	cd backend && pip install -r requirements.txt
+	cd backend && uv sync
 
 backend: ## Run FastAPI dev server (hot reload)
-	cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+	cd backend && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 backend-check: ## Check backend syntax (no import errors)
-	cd backend && python -c "from app.main import app; print('✅ Backend imports OK')"
+	cd backend && uv run python -c "from app.main import app; print('✅ Backend imports OK')"
 
 # ─── Frontend ─────────────────────────────────────────────────────────────────
 
@@ -47,16 +47,16 @@ build-frontend: ## Build frontend for production
 # ─── ETL / Data Ingestion ─────────────────────────────────────────────────────
 
 seed-mock: ## Seed mock data (no StatsBomb needed, for local dev/testing)
-	cd backend && python scripts/seed_mock.py
+	cd backend && uv run python scripts/seed_mock.py
 
 ingest: ## Run full ETL ingestion (requires STATSBOMB_DATA_PATH in .env)
-	cd backend && python scripts/ingest.py
+	cd backend && uv run python scripts/ingest.py
 
 ingest-season: ## Ingest single season (use: make ingest-season COMPETITION_ID=2 SEASON_ID=44)
-	cd backend && python scripts/ingest.py --competition_id $(COMPETITION_ID) --season_id $(SEASON_ID)
+	cd backend && uv run python scripts/ingest.py --competition_id $(COMPETITION_ID) --season_id $(SEASON_ID)
 
 ingest-dry: ## Dry-run ETL (show what would be processed)
-	cd backend && python scripts/ingest.py --dry-run
+	cd backend && uv run python scripts/ingest.py --dry-run
 
 # ─── Database Utilities ───────────────────────────────────────────────────────
 
@@ -81,7 +81,7 @@ setup: ## First-time setup: copy .env.example and install deps
 
 dev: up ## Start infrastructure + both dev servers (runs in background)
 	@echo "Starting backend..."
-	@cd backend && uvicorn app.main:app --reload --port 8000 &
+	@cd backend && uv run uvicorn app.main:app --reload --port 8000 &
 	@echo "Starting frontend..."
 	@cd frontend && npm run dev
 

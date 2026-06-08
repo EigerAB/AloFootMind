@@ -5,19 +5,22 @@
 ## 功能特性
 
 - **比赛列表**：浏览所有比赛，支持分页
-- **比赛详情**：查看比分、阵容、关键事件、统计数据
-- **赛后分析**：触发 AI 战术分析，实时显示 Agent 执行过程
-- **赛前分析**：球队对阵分析与预测
-- **智能问答**：基于 RAG 的语义搜索问答
-- **多语言**：支持中文/英文切换
+- **比赛详情**：查看比分、阵容、关键事件、统计数据，触发赛后分析
+- **赛后分析**：触发 AI 战术分析，SSE 流式实时显示 Agent 执行过程
+- **赛前分析**：球队对阵分析与预测，生成战前情报报告
+- **智能问答**：基于 RAG 的语义搜索问答，支持多轮对话与流式回答中断
+- **聊天历史**：最多 10 条会话，支持重命名、删除，新聊天自动创建会话
+- **用户认证**：注册/登录/邮箱验证/密码重置，未登录时弹窗引导
+- **多语言**：中文/英文切换，所有 UI 文本通过 i18n 管理
+- **通用确认对话框**：可复用的 ConfirmDialog 组件（用于删除/清空确认）
 
 ## 技术栈
 
 - **框架**：Vue 3.5 + TypeScript
-- **构建工具**：Vite 6
+- **构建工具**：Vite 8
 - **路由**：Vue Router 4
-- **状态管理**：Pinia（可选）
-- **UI 样式**：TailwindCSS 4
+- **状态管理**：Pinia（auth、chat sessions）
+- **UI 样式**：TailwindCSS 3
 - **国际化**：vue-i18n
 - **Markdown 渲染**：markdown-it
 - **SSE 流式传输**：自定义 composable
@@ -60,15 +63,21 @@ frontend/
 │   │   └── index.ts          # API 客户端封装
 │   ├── components/
 │   │   ├── AgentViewer.vue   # Agent 执行过程可视化
-│   │   ├── AppLayout.vue     # 应用布局
+│   │   ├── AppLayout.vue     # 应用布局（含侧边栏导航与聊天会话列表）
+│   │   ├── AuthModal.vue     # 未登录提示模态框
+│   │   ├── ConfirmDialog.vue # 通用确认对话框
 │   │   └── ReportViewer.vue  # Markdown 报告渲染
 │   ├── composables/
-│   │   └── useSseStream.ts   # SSE 流式传输 hook
+│   │   ├── useMarkdown.ts    # Markdown 渲染
+│   │   └── useSseStream.ts   # SSE 流式传输 hook（支持 AbortController 中断）
 │   ├── i18n/
 │   │   ├── en.ts             # 英文翻译
 │   │   └── zh.ts             # 中文翻译
+│   ├── stores/
+│   │   ├── auth.ts           # 用户认证状态（Token 刷新、自动持久化）
+│   │   └── chat.ts           # 聊天会话状态（CRUD、列表排序）
 │   ├── router/
-│   │   └── index.ts          # 路由配置
+│   │   └── index.ts          # 路由配置（含 /chat/:id 会话路由）
 │   ├── style.css             # 全局样式
 │   ├── App.vue               # 根组件
 │   └── main.ts               # 入口文件
@@ -100,22 +109,41 @@ frontend/
 - 实时显示 Agent 执行过程
 - 展示分析报告
 
-### 智能问答 (`/chat`)
-- 基于比赛数据的语义搜索
-- AI 回答足球相关问题
+### 智能问答 (`/chat` 与 `/chat/:id`)
+- 基于比赛数据的语义搜索，RAG 驱动精准回答
+- 多轮对话，支持 SSE 流式传输
+- 发送第一条消息时自动创建会话并跳转到 `/chat/:id`
+- 流式回答过程中可随时点击「中断」停止生成
+- 已保存的历史会话自动加载到侧边栏，支持重命名/删除
+
+### 登录 (`/login`)
+- 邮箱 + 密码登录
+- 未登录用户访问需要认证的页面时自动弹出 AuthModal
+
+### 注册 (`/register`)
+- 邮箱注册，发送 6 位数字验证码
+- 验证通过后方可登录
+
+### 密码重置 (`/forgot-password`)
+- 通过邮箱发送重置验证码
+- 输入验证码后设置新密码
 
 ## API 配置
 
 API 基础路径在 `src/api/index.ts` 中配置：
 
 ```typescript
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const BASE_URL = ''
 ```
 
-可通过 `.env` 文件覆盖：
+当前配置为相对路径（请求走当前域名），适用于前后端同域部署。如需代理到本地后端开发环境，在 `vite.config.ts` 中配置 `server.proxy`：
 
-```env
-VITE_API_URL=http://localhost:8000
+```typescript
+server: {
+  proxy: {
+    '/api': 'http://localhost:8000'
+  }
+}
 ```
 
 ## 国际化

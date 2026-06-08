@@ -6,10 +6,7 @@ import json
 import logging
 import textwrap
 
-from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph
-
-DEEPSEEK_BASE = "https://api.deepseek.com/v1"
 
 from app.agents.state import AnalysisState
 from app.agents.utils import (
@@ -19,20 +16,10 @@ from app.agents.utils import (
     set_task_result,
     set_task_status,
 )
-from app.core.config import settings
+from app.services.llm_client import get_deepseek_llm
 from app.services.rag_service import retrieve
 
 logger = logging.getLogger(__name__)
-
-
-def _deepseek() -> ChatOpenAI:
-    return ChatOpenAI(
-        model="deepseek-chat",
-        api_key=settings.DEEPSEEK_API_KEY,
-        base_url=DEEPSEEK_BASE,
-        temperature=0.3,
-        max_tokens=2000,
-    )
 
 
 async def fetch_match_data(state: AnalysisState) -> dict:
@@ -169,7 +156,7 @@ async def rag_retrieval(state: AnalysisState) -> dict:
 async def _call_tactical_analysis(
     match_data: dict, rag_context: list[dict], language: str = "en"
 ) -> str:
-    llm = _deepseek()
+    llm = get_deepseek_llm()
     context_text = "\n\n".join(
         f"[Source {i+1}] {r['text']}" for i, r in enumerate(rag_context[:20])
     ) or ("No historical context available." if language != "zh" else "无历史背景数据。")

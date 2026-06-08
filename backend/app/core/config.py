@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     MILVUS_PORT: int = 19530
 
     DEEPSEEK_API_KEY: str = ""
+    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com/v1"
+    DEEPSEEK_MODEL: str = "deepseek-chat"
     OPENAI_API_KEY: str = ""
 
     STATSBOMB_DATA_PATH: str = ""
