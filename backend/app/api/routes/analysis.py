@@ -4,14 +4,17 @@ import json
 import uuid
 from typing import AsyncGenerator
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.graph import run_analysis
 from app.agents.state import AnalysisState
 from app.agents.subgraphs.qa import build_qa_graph, stream_answer
+from app.core.security import get_current_user
+from app.db.models import User
 from app.db.postgres import get_db
 from app.db.redis_client import get_redis
 
@@ -35,6 +38,7 @@ class ChatRequest(BaseModel):
 async def trigger_pre_match(
     body: PreMatchRequest,
     background_tasks: BackgroundTasks,
+    user: User = Depends(get_current_user),
 ):
     task_id = str(uuid.uuid4())
     redis = await get_redis()
@@ -47,9 +51,72 @@ async def trigger_pre_match(
             "request_type": "pre_match",
             "team_ids": [body.home_team_id, body.away_team_id],
             "language": body.language,
+            "user_id": user.id,
         },
     )
     return {"task_id": task_id, "status": "pending"}
+
+
+@router.get("/pre-match/reports")
+async def list_pre_match_reports(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        text("""
+            SELECT ar.id, ar.home_team_id, ar.away_team_id, ar.report_markdown,
+                   ar.created_at, ht.team_name AS home_team_name, at.team_name AS away_team_name
+            FROM analysis_reports ar
+            JOIN teams ht ON ar.home_team_id = ht.team_id
+            JOIN teams at ON ar.away_team_id = at.team_id
+            WHERE ar.user_id = :uid AND ar.report_type = 'pre_match'
+            ORDER BY ar.created_at DESC
+            LIMIT 5
+        """),
+        {"uid": user.id},
+    )
+    rows = result.mappings().all()
+    return [
+        {
+            "id": r["id"],
+            "home_team_id": r["home_team_id"],
+            "away_team_id": r["away_team_id"],
+            "home_team_name": r["home_team_name"],
+            "away_team_name": r["away_team_name"],
+            "report_markdown": r["report_markdown"],
+            "created_at": str(r["created_at"]),
+        }
+        for r in rows
+    ]
+
+
+@router.delete("/pre-match/reports/{report_id}")
+async def delete_pre_match_report(
+    report_id: int,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        text("DELETE FROM analysis_reports WHERE id = :rid AND user_id = :uid AND report_type = 'pre_match' RETURNING id"),
+        {"rid": report_id, "uid": user.id},
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Report not found")
+    await session.commit()
+    return {"message": "Deleted"}
+
+
+@router.delete("/pre-match/reports")
+async def clear_pre_match_reports(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    await session.execute(
+        text("DELETE FROM analysis_reports WHERE user_id = :uid AND report_type = 'pre_match'"),
+        {"uid": user.id},
+    )
+    await session.commit()
+    return {"message": "All cleared"}
 
 
 @router.get("/tasks/{task_id}/status")
@@ -142,6 +209,7 @@ async def chat(body: ChatRequest):
         "step_log": [],
         "error": None,
         "language": "zh",
+        "user_id": None,
     }
 
     # Run qa_graph to determine route and get context

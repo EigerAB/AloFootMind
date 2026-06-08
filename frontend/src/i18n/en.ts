@@ -103,6 +103,13 @@ export default {
     sameTeamTitle: 'Invalid Selection',
     sameTeamMsg: 'Home and away team cannot be the same. Please choose different teams.',
     sameTeamClose: 'Got it',
+    historyTitle: 'Report History',
+    clearAll: 'Clear All',
+    delete: 'Delete',
+    limitTitle: 'Report Limit Reached',
+    limitMsg: 'You can save up to 5 reports. Continuing will delete the oldest report: {oldest}',
+    cancel: 'Cancel',
+    confirm: 'Confirm',
   },
   chat: {
     title: 'AI Football Chat',

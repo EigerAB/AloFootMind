@@ -153,6 +153,7 @@ async def run_analysis(initial_state: dict) -> AnalysisState:
         step_log=[],
         error=None,
         language=initial_state.get("language", "en"),
+        user_id=initial_state.get("user_id"),
     )
     try:
         return await get_main_graph().ainvoke(

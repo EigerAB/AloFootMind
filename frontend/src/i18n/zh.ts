@@ -103,6 +103,13 @@ export default {
     sameTeamTitle: '选择无效',
     sameTeamMsg: '主队和客队不能是同一支球队，请重新选择。',
     sameTeamClose: '知道了',
+    historyTitle: '历史报告',
+    clearAll: '清空全部',
+    delete: '删除',
+    limitTitle: '报告数量已达上限',
+    limitMsg: '您最多可保存 5 份报告。继续生成将删除最早的报告：{oldest}',
+    cancel: '取消',
+    confirm: '确认',
   },
   chat: {
     title: 'AI 足球问答',

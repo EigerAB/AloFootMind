@@ -135,6 +135,9 @@ class AnalysisReport(Base):
         ForeignKey("teams.team_id"), nullable=True
     )
     report_markdown: Mapped[str] = mapped_column(Text, nullable=False)
+    user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now()
     )

@@ -124,6 +124,15 @@ export const api = {
       `/api/tasks/${taskId}/result`
     ),
 
+  getPreMatchReports: () =>
+    request<PreMatchReport[]>('/api/pre-match/reports'),
+
+  deletePreMatchReport: (id: number) =>
+    request<{ message: string }>(`/api/pre-match/reports/${id}`, { method: 'DELETE' }),
+
+  clearPreMatchReports: () =>
+    request<{ message: string }>('/api/pre-match/reports', { method: 'DELETE' }),
+
   // Auth
   register: (body: { email: string; password: string; nickname: string }) =>
     request<{ message: string }>('/api/auth/register', {
@@ -190,6 +199,16 @@ export interface CompetitionWithTeams {
   competition_id: number
   competition_name: string
   teams: Team[]
+}
+
+export interface PreMatchReport {
+  id: number
+  home_team_id: number
+  away_team_id: number
+  home_team_name: string
+  away_team_name: string
+  report_markdown: string
+  created_at: string
 }
 
 export interface Match {

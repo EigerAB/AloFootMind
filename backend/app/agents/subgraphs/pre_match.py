@@ -416,10 +416,10 @@ async def intelligence_report(state: AnalysisState) -> dict:
         async with AsyncSessionLocal() as session:
             await session.execute(
                 text("""
-                    INSERT INTO analysis_reports (report_type, home_team_id, away_team_id, report_markdown)
-                    VALUES ('pre_match', :h, :a, :md)
+                    INSERT INTO analysis_reports (report_type, home_team_id, away_team_id, report_markdown, user_id)
+                    VALUES ('pre_match', :h, :a, :md, :uid)
                 """),
-                {"h": home_id, "a": away_id, "md": report},
+                {"h": home_id, "a": away_id, "md": report, "uid": state.get("user_id")},
             )
             await session.commit()
 

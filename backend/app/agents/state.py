@@ -35,6 +35,7 @@ class AnalysisState(TypedDict):
     step_log: list[StepLogEntry]
     error: str | None
     language: str
+    user_id: int | None
 
 
 def make_step_entry(

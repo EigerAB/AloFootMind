@@ -150,6 +150,14 @@ const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 watch(
   () => props.steps,
   (newSteps) => {
+    // Steps array was reset (e.g. user started a new report) — clear internal state
+    if (newSteps.length < _processedCount) {
+      nodeMap.value.clear()
+      expanded.value.clear()
+      _processedCount = 0
+      _queue.length = 0
+      _isProcessing = false
+    }
     const fresh = newSteps.slice(_processedCount)
     _processedCount = newSteps.length
     _queue.push(...fresh)
@@ -234,7 +242,11 @@ function nodeNameClass(status: string) {
 function formatTime(iso: string) {
   try {
     const localeStr = locale.value === 'zh' ? 'zh-CN' : 'en-US'
-    return new Date(iso).toLocaleTimeString(localeStr, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    const s = new Date(iso).toLocaleTimeString(localeStr, {
+      timeZone: 'Asia/Shanghai',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    })
+    return `${s} (UTC+8)`
   } catch { return '' }
 }
 </script>
