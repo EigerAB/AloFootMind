@@ -1,4 +1,8 @@
-"""QA Sub-graph: query_classify → rag_retrieval → answer_generation (streaming)."""
+"""QA Sub-graph: query_rewrite → relevance_gate → query_classify → rag_retrieval.
+
+The graph is a pure router + retriever. Answer generation (streaming) is handled
+by the endpoint layer via stream_answer / stream_direct_answer / stream_boundary_answer.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -11,7 +15,7 @@ from langgraph.graph import END, StateGraph
 from sqlalchemy import text
 
 from app.agents.state import AnalysisState
-from app.agents.utils import llm_retry, push_step
+from app.agents.utils import push_step
 from app.db.postgres import AsyncSessionLocal
 from app.services.llm_client import get_deepseek_llm
 from app.services.rag_service import classify_query, retrieve
@@ -233,34 +237,30 @@ async def rag_retrieval(state: AnalysisState) -> dict:
         return {"step_log": step_log, "rag_context": [], "error": str(e)}
 
 
-async def boundary_answer(state: AnalysisState) -> dict:
-    """Generate boundary hint when user chats beyond 3 generic turns."""
-    node = "boundary_answer"
-    try:
-        step_log = await push_step(state, node, "started", "Generating boundary hint...")
+async def stream_boundary_answer(
+    query: str,
+    conversation_history: list[dict],
+    language: str = "zh",
+) -> AsyncGenerator[str, None]:
+    """Stream a boundary hint when the user has exceeded 3 generic turns."""
+    lang = language
+    history = conversation_history or []
 
-        lang = state.get("language", "en")
-        query = state.get("query") or ""
-        history = state.get("conversation_history") or []
+    user_name = ""
+    for turn in reversed(history):
+        content = turn.get("content", "")
+        if "我叫" in content or "我的名字是" in content:
+            idx = content.find("我叫")
+            if idx >= 0:
+                remainder = content[idx + 2:].strip()
+                user_name = remainder.split(",")[0].split("。")[0].split("，")[0].strip()
+                if user_name:
+                    break
 
-        # Extract user name from history if available
-        user_name = ""
-        for turn in reversed(history):
-            content = turn.get("content", "")
-            if "我叫" in content or "我的名字是" in content:
-                # Simple extraction: find text after "我叫"
-                idx = content.find("我叫")
-                if idx >= 0:
-                    remainder = content[idx + 2:].strip()
-                    # Take first word/name
-                    user_name = remainder.split(",")[0].split("。")[0].split("，")[0].strip()
-                    if user_name:
-                        break
+    name_prefix = f"{user_name}，" if user_name and lang == "zh" else ""
 
-        name_prefix = f"{user_name}，" if user_name and lang == "zh" else ""
-
-        if lang == "zh":
-            system_prompt = f"""你是 AloFootMind，一位足球数据分析专家。
+    if lang == "zh":
+        system_prompt = f"""你是 AloFootMind，一位足球数据分析专家。
 {name_prefix}你目前连续多轮没有提出足球相关的问题。
 请礼貌地告知用户你的专长范围，并给出示例问题引导用户回到足球主题。
 
@@ -274,144 +274,59 @@ async def boundary_answer(state: AnalysisState) -> dict:
 3. 给出 2-3 个示例问题
 4. 语气友好专业
 5. 如果用户用中文提问，用中文回复"""
-        else:
-            system_prompt = """You are AloFootMind, a football data analysis expert.
+    else:
+        system_prompt = """You are AloFootMind, a football data analysis expert.
 The user has been chatting without football-related questions for several turns.
 Politely inform them of your scope and give example questions to guide them back.
 
 Data scope: You only have 2023/2024 Bundesliga data.
 You can answer tactical analysis, player stats, and match intelligence questions."""
 
-        messages = [SystemMessage(content=system_prompt)]
-        for turn in history[-3:]:
-            if turn.get("role") == "user":
-                messages.append(HumanMessage(content=turn["content"]))
-            elif turn.get("role") == "assistant":
-                messages.append(AIMessage(content=turn["content"]))
-        messages.append(HumanMessage(content=query))
+    messages: list = [SystemMessage(content=system_prompt)]
+    for turn in history[-3:]:
+        if turn.get("role") == "user":
+            messages.append(HumanMessage(content=turn["content"]))
+        elif turn.get("role") == "assistant":
+            messages.append(AIMessage(content=turn["content"]))
+    messages.append(HumanMessage(content=query))
 
-        llm = get_deepseek_llm(streaming=False, temperature=0.4, max_tokens=1200, request_timeout=25)
-        response = await llm.ainvoke(messages)
-
-        step_log = await push_step(state, node, "completed", "Boundary hint generated.")
-        return {"step_log": step_log, "report_markdown": response.content}
-
-    except Exception as e:
-        step_log = await push_step(state, node, "failed", str(e))
-        return {"step_log": step_log, "error": str(e)}
+    llm = get_deepseek_llm(streaming=True, temperature=0.4, max_tokens=1200, request_timeout=25)
+    async for chunk in llm.astream(messages):
+        if chunk.content:
+            yield chunk.content
+        await asyncio.sleep(0)
 
 
-async def direct_answer(state: AnalysisState) -> dict:
-    """Direct LLM answer for generic conversation (within soft limit)."""
-    node = "direct_answer"
-    try:
-        step_log = await push_step(state, node, "started", "Generating direct answer...")
+async def stream_direct_answer(
+    query: str,
+    conversation_history: list[dict],
+    language: str = "zh",
+) -> AsyncGenerator[str, None]:
+    """Stream a direct conversational reply (no RAG) for generic turns within the soft limit."""
+    lang = language
+    system_prompt = (
+        "You are AloFootMind, a friendly football expert assistant.\n"
+        "You can engage in general conversation, remember user preferences, "
+        "and answer casual questions.\n"
+        "When the conversation turns to football, switch to data-driven analysis mode.\n"
+        f"Current language: {'Chinese' if lang == 'zh' else 'English'}."
+    )
 
-        query = state.get("query") or ""
-        history = state.get("conversation_history") or []
-        lang = state.get("language", "en")
+    messages: list = [SystemMessage(content=system_prompt)]
+    for turn in (conversation_history or [])[-5:]:
+        if turn.get("role") == "user":
+            messages.append(HumanMessage(content=turn["content"]))
+        elif turn.get("role") == "assistant":
+            messages.append(AIMessage(content=turn["content"]))
+    messages.append(HumanMessage(content=query))
 
-        system_prompt = (
-            "You are AloFootMind, a friendly football expert assistant.\n"
-            "You can engage in general conversation, remember user preferences, "
-            "and answer casual questions.\n"
-            "When the conversation turns to football, switch to data-driven analysis mode.\n"
-            f"Current language: {'Chinese' if lang == 'zh' else 'English'}."
-        )
-
-        messages: list = [SystemMessage(content=system_prompt)]
-        for turn in history[-5:]:
-            if turn.get("role") == "user":
-                messages.append(HumanMessage(content=turn["content"]))
-            elif turn.get("role") == "assistant":
-                messages.append(AIMessage(content=turn["content"]))
-        messages.append(HumanMessage(content=query))
-
-        llm = get_deepseek_llm(streaming=False, temperature=0.4, max_tokens=1200, request_timeout=25)
-        response = await llm.ainvoke(messages)
-
-        step_log = await push_step(state, node, "completed", "Direct answer generated.")
-        return {"step_log": step_log, "report_markdown": response.content}
-
-    except Exception as e:
-        step_log = await push_step(state, node, "failed", str(e))
-        return {"step_log": step_log, "error": str(e)}
+    llm = get_deepseek_llm(streaming=True, temperature=0.4, max_tokens=1200, request_timeout=25)
+    async for chunk in llm.astream(messages):
+        if chunk.content:
+            yield chunk.content
+        await asyncio.sleep(0)
 
 
-async def answer_generation(state: AnalysisState) -> dict:
-    node = "answer_generation"
-    try:
-        step_log = await push_step(state, node, "started", "Generating answer...")
-
-        query = state.get("query") or ""
-        rag_context = state.get("rag_context") or []
-        history = state.get("conversation_history") or []
-
-        if rag_context:
-            context_text = "\n\n".join(
-                f"[Source {i+1}] {r['text']}" for i, r in enumerate(rag_context[:5])
-            )
-            has_context = True
-        else:
-            context_text = ""
-            has_context = False
-
-        lang = state.get("language", "en")
-        if lang == "zh":
-            system_prompt = """你是 AloFootMind，一位专业的足球数据分析 AI 助手。
-
-你有两个信息来源：
-1. RAG 上下文：从知识库检索到的足球数据（可能为空）。
-   - 有 RAG 上下文时：基于它回答，并标注 [来源 N]。
-   - 无 RAG 上下文时：直接说明"暂无相关数据"，不要编造。
-
-2. 对话历史：本轮对话中用户告诉你的信息。
-   - 你应该记住用户提到的个人信息（姓名、身份、偏好）。
-   - 回答用户关于自己的问题时，从对话历史中提取。
-
-数据边界：你目前仅有 2023/2024 赛季男子德甲联赛的数据。
-请用 Markdown 格式回复。"""
-        else:
-            system_prompt = """You are AloFootMind, an expert AI football analyst.
-
-You have access to two sources of information:
-1. RAG CONTEXT: Football knowledge retrieved from the database (may be empty).
-   - When RAG context is provided: base your answer on it and cite [Source N].
-   - When RAG context is empty: simply say you don't have data for that query.
-
-2. CONVERSATION HISTORY: Previous messages in this conversation.
-   - Remember personal facts the user told you (name, role, preferences).
-   - When answering questions about the user, extract from conversation history.
-
-Data boundary: You only have data for the 2023/2024 Bundesliga season.
-Format your answers in clear Markdown."""
-
-        messages: list = [SystemMessage(content=system_prompt)]
-
-        for turn in history[-5:]:
-            if turn.get("role") == "user":
-                messages.append(HumanMessage(content=turn["content"]))
-            elif turn.get("role") == "assistant":
-                messages.append(AIMessage(content=turn["content"]))
-
-        user_content = query
-        if has_context:
-            user_content = f"Context from knowledge base:\n{context_text}\n\nQuestion: {query}"
-        else:
-            user_content = f"Question: {query}\n\n(No football data retrieved. Answer based on conversation history or general knowledge.)"
-
-        messages.append(HumanMessage(content=user_content))
-
-        llm = get_deepseek_llm(streaming=False, temperature=0.4, max_tokens=1200, request_timeout=25)
-        response = await llm.ainvoke(messages)
-        answer = response.content
-
-        step_log = await push_step(state, node, "completed", "Answer generated.")
-        return {"step_log": step_log, "report_markdown": answer}
-
-    except Exception as e:
-        step_log = await push_step(state, node, "failed", str(e))
-        return {"step_log": step_log, "error": str(e)}
 
 
 def _extract_user_profile(conversation_history: list[dict]) -> str:
@@ -524,14 +439,17 @@ def _route(state: AnalysisState) -> str:
 
 
 def build_qa_graph() -> StateGraph:
+    """Pure router + retriever graph.
+
+    All three paths terminate at END after setting analysis_result._route.
+    The endpoint layer reads _route and dispatches to the appropriate
+    stream_answer / stream_direct_answer / stream_boundary_answer generator.
+    """
     graph = StateGraph(AnalysisState)
     graph.add_node("query_rewrite", query_rewrite)
     graph.add_node("relevance_gate", relevance_gate)
     graph.add_node("query_classify", query_classify)
     graph.add_node("rag_retrieval", rag_retrieval)
-    graph.add_node("boundary_answer", boundary_answer)
-    graph.add_node("direct_answer", direct_answer)
-    graph.add_node("answer_generation", answer_generation)
 
     graph.set_entry_point("query_rewrite")
     graph.add_edge("query_rewrite", "relevance_gate")
@@ -540,14 +458,11 @@ def build_qa_graph() -> StateGraph:
         _route,
         {
             "classify": "query_classify",
-            "boundary_answer": "boundary_answer",
-            "direct_answer": "direct_answer",
+            "boundary_answer": END,
+            "direct_answer": END,
         },
     )
     graph.add_edge("query_classify", "rag_retrieval")
-    graph.add_edge("rag_retrieval", "answer_generation")
-    graph.add_edge("answer_generation", END)
-    graph.add_edge("boundary_answer", END)
-    graph.add_edge("direct_answer", END)
+    graph.add_edge("rag_retrieval", END)
 
     return graph.compile()

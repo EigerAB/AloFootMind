@@ -12,7 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.graph import run_analysis
 from app.agents.state import AnalysisState
-from app.agents.subgraphs.qa import build_qa_graph, stream_answer
+from app.agents.subgraphs.qa import (
+    build_qa_graph,
+    stream_answer,
+    stream_direct_answer,
+    stream_boundary_answer,
+)
 from app.core.security import get_current_user
 from app.db.models import User
 from app.db.postgres import get_db
@@ -287,10 +292,14 @@ async def chat(
                     {"text": r["text"][:120], "collection": r.get("collection", "")}
                     for r in rag_context[:3]
                 ]
+            elif route == "direct_answer":
+                async for token in stream_direct_answer(query, history, language="zh"):
+                    full_response += token
+                    yield f"data: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
             else:
-                report = result.get("report_markdown", "")
-                full_response = report
-                yield f"data: {json.dumps({'token': report}, ensure_ascii=False)}\n\n"
+                async for token in stream_boundary_answer(query, history, language="zh"):
+                    full_response += token
+                    yield f"data: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
 
             # Save session
             from app.db.postgres import AsyncSessionLocal
