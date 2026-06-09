@@ -110,6 +110,17 @@
       </nav>
 
       <ConfirmDialog
+        v-model:visible="showLogoutDialog"
+        :title="t('auth.logoutConfirmTitle')"
+        :message="t('auth.logoutConfirmMsg')"
+        icon="👋"
+        :confirm-text="t('auth.logout')"
+        :cancel-text="t('auth.cancel')"
+        confirm-class="flex-1 py-2 bg-red-700 hover:bg-red-600 text-white text-sm font-semibold rounded-lg transition-colors"
+        @confirm="doLogout"
+      />
+
+      <ConfirmDialog
         v-model:visible="showDeleteDialog"
         :title="t('chat.confirmDelete')"
         :message="t('chat.confirmDeleteMsg')"
@@ -243,14 +254,18 @@ const route = useRoute()
 
 const isChatRoute = computed(() => route.path.startsWith('/chat'))
 
-async function handleLogout() {
+function handleLogout() {
+  showLogoutDialog.value = true
+}
+
+async function doLogout() {
   try {
     await api.logout()
   } catch {
     // ignore
   }
   authStore.clearAuth()
-  router.push('/matches')
+  router.push('/login')
 }
 
 const navLinks = [
@@ -260,6 +275,7 @@ const navLinks = [
 
 const editingSessionId = ref<number | null>(null)
 const editingName = ref('')
+const showLogoutDialog = ref(false)
 const showDeleteDialog = ref(false)
 const pendingDeleteId = ref<number | null>(null)
 const showLimitDialog = ref(false)

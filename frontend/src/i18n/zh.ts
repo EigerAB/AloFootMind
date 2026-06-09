@@ -207,5 +207,7 @@ export default {
     modalDesc: '登录后即可使用此功能',
     cancel: '取消',
     logout: '退出',
+    logoutConfirmTitle: '确认退出登录',
+    logoutConfirmMsg: '确定要退出当前账号吗？',
   },
 }

@@ -207,5 +207,7 @@ export default {
     modalDesc: 'Log in to access this feature',
     cancel: 'Cancel',
     logout: 'Logout',
+    logoutConfirmTitle: 'Confirm Logout',
+    logoutConfirmMsg: 'Are you sure you want to log out?',
   },
 }
