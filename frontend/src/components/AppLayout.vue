@@ -186,6 +186,40 @@
             ]"
           >EN</button>
         </div>
+
+        <!-- Icon links -->
+        <div class="flex items-center justify-around">
+          <a
+            href="/design.html"
+            target="_blank"
+            title="Design Doc"
+            class="text-gray-500 hover:text-green-400 transition-colors"
+          >
+            <i class="iconfont icon-shuomingshu" style="font-size: 20px;"></i>
+          </a>
+          <a
+            href="https://github.com/EigerAB/AloFootMind"
+            target="_blank"
+            title="GitHub"
+            class="text-gray-500 hover:text-green-400 transition-colors"
+          >
+            <i class="iconfont icon-github" style="font-size: 20px;"></i>
+          </a>
+          <button
+            @click="openImageModal('qq')"
+            title="QQ"
+            class="text-gray-500 hover:text-green-400 transition-colors"
+          >
+            <i class="iconfont icon-QQ" style="font-size: 20px;"></i>
+          </button>
+          <button
+            @click="openImageModal('weixin')"
+            title="Weixin"
+            class="text-gray-500 hover:text-green-400 transition-colors"
+          >
+            <i class="iconfont icon-weixin" style="font-size: 20px;"></i>
+          </button>
+        </div>
         <!-- <p class="text-xs text-gray-600">{{ t('app.dataSource') }}</p> -->
       </div>
     </aside>
@@ -234,6 +268,28 @@
       <slot />
     </main>
   </div>
+
+  <!-- Image Modal -->
+  <Teleport to="body">
+    <Transition name="fade">
+      <div
+        v-if="showImageModal"
+        class="fixed inset-0 z-[100] flex items-center justify-center"
+      >
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" @click="showImageModal = false"></div>
+        <div class="relative z-10 max-w-sm w-full mx-4">
+          <button
+            @click="showImageModal = false"
+            class="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-gray-700 border border-gray-600 text-white flex items-center justify-center hover:bg-gray-600 transition-colors z-20"
+            title="Close"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+          <img :src="modalImageSrc" class="w-full rounded-xl shadow-2xl border border-gray-700" alt="QR Code" />
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -245,6 +301,8 @@ import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 import { api } from '@/api'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import qqImg from '@/assets/images/qq.jpg'
+import weixinImg from '@/assets/images/weixin.jpg'
 
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
@@ -282,6 +340,13 @@ const pendingDeleteId = ref<number | null>(null)
 const showLimitDialog = ref(false)
 
 const SESSION_LIMIT = 10
+const showImageModal = ref(false)
+const modalImageSrc = ref('')
+
+function openImageModal(type: 'qq' | 'weixin') {
+  modalImageSrc.value = type === 'qq' ? qqImg : weixinImg
+  showImageModal.value = true
+}
 
 function startRename(s: { id: number; name: string }) {
   editingSessionId.value = s.id
@@ -323,3 +388,14 @@ onMounted(() => {
   }
 })
 </script>
+
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+</style>
