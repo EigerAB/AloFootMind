@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>AloFootMind — System Design v2</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,'PingFang SC','Helvetica Neue',sans-serif;background:#0a0d13;color:#c9d1d9;font-size:13px;line-height:1.6;padding:24px 28px;min-width:1100px}
+h2{font-size:14px;font-weight:700;color:#e6edf3}
+h3{font-size:12px;font-weight:700;color:#58a6ff;margin-bottom:7px}
+h3.g{color:#3fb950}h3.p{color:#bc8cff}h3.o{color:#e3b341}
+p{color:#8b949e;font-size:12px;line-height:1.7}p+p{margin-top:5px}strong{color:#c9d1d9}
+code{font-family:'JetBrains Mono',monospace;font-size:11px;background:#21262d;border:1px solid #30363d;border-radius:3px;padding:1px 5px;color:#ffa657}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px}
+.card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:18px 20px;height:100%}
+.sh{display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #21262d}
+.sn{width:24px;height:24px;border-radius:7px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800}
+.ng{background:#238636;color:#fff}.nb{background:#1f6feb;color:#fff}.np{background:#6e40c9;color:#fff}.no{background:#9e6a03;color:#fff}
+.sub{margin-bottom:16px}.sub:last-child{margin-bottom:0}
+.divider{height:1px;background:#21262d;margin:12px 0}
+.t{display:inline-flex;align-items:center;padding:2px 7px;border-radius:5px;font-size:10.5px;font-weight:600;border:1px solid}
+.tg{background:#0d2818;color:#3fb950;border-color:#238636}.tb{background:#0d1b2e;color:#58a6ff;border-color:#1f6feb}
+.tp{background:#1a0e2e;color:#bc8cff;border-color:#6e40c9}.to{background:#2d1a00;color:#e3b341;border-color:#9e6a03}
+.tr{background:#2d0f0f;color:#f85149;border-color:#da3633}.tgr{background:#1c2128;color:#8b949e;border-color:#30363d}
+.info{background:#0d1b2e;border-left:3px solid #1f6feb;border-radius:0 6px 6px 0;padding:9px 13px;margin:8px 0;font-size:12px;color:#8b949e}
+.info.g{background:#0d2818;border-color:#238636}.info.p{background:#1a0e2e;border-color:#6e40c9}
+.info.o{background:#2d1a00;border-color:#9e6a03}.info.r{background:#2d0f0f;border-color:#da3633}
+.ph{display:flex;align-items:center;gap:16px;padding:18px 24px;background:#161b22;border:1px solid #30363d;border-radius:12px;margin-bottom:20px}
+.ph-logo{font-size:22px;font-weight:800;color:#fff}.ph-logo span{color:#3fb950}
+.ph-sub{color:#8b949e;font-size:12px;margin-top:3px}
+.pipe{display:flex;align-items:stretch;gap:0;margin:12px 0}
+.pipe-src{background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:10px 12px;min-width:145px}
+.pipe-src-t{font-size:11px;font-weight:700;color:#e3b341;margin-bottom:6px}
+.pf{display:flex;align-items:center;gap:5px;padding:3px 0;font-size:10.5px;color:#8b949e;font-family:monospace}
+.pipe-arrow{display:flex;align-items:center;padding:0 8px;color:#444c56;font-size:18px;align-self:center}
+.pipe-steps{display:flex;flex-direction:column;gap:4px;flex:1}
+.ps{padding:8px 12px;border-radius:7px;border:1px solid;font-size:11px;font-weight:600}
+.psd{font-size:10px;color:#8b949e;margin-top:2px;font-weight:400}
+.ps1{background:#0d1b2e;border-color:#1f6feb;color:#58a6ff}
+.ps2{background:#1a0e2e;border-color:#6e40c9;color:#bc8cff}
+.ps3{background:#2d1a00;border-color:#9e6a03;color:#e3b341}
+.ps4{background:#2d0f0f;border-color:#da3633;color:#f85149}
+.pcon{color:#444c56;padding:0 5px;font-size:14px;align-self:center}
+.pipe-stores{display:flex;flex-direction:column;justify-content:center;gap:6px;margin-left:8px}
+.store{display:flex;align-items:center;gap:6px;padding:7px 11px;border-radius:7px;border:1px solid;font-size:11px;font-weight:600;white-space:nowrap}
+.stm{background:#0d1b2e;border-color:#1f6feb;color:#58a6ff}
+.stp{background:#2d1a00;border-color:#9e6a03;color:#e3b341}
+.str{background:#2d0f0f;border-color:#da3633;color:#f85149}
+.lc{display:grid;grid-template-columns:68px 1fr;gap:10px;padding:9px 12px;background:#0d1117;border:1px solid #21262d;border-radius:8px;margin-bottom:6px}
+.lc-badge{padding:3px 0;border-radius:5px;font-size:10px;font-weight:700;text-align:center;border:1px solid}
+.lc-name{font-size:12px;font-weight:600;color:#e6edf3;margin-bottom:3px}
+.lc-meta{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:4px}
+.lc-desc{font-size:11px;color:#8b949e;line-height:1.6}
+.smr{display:flex;align-items:center;gap:8px;padding:6px 10px;background:#0d1117;border:1px solid #21262d;border-radius:6px;margin-bottom:3px}
+.smn{font-family:monospace;font-size:11px;color:#bc8cff;min-width:190px;flex-shrink:0}
+.sms{display:flex;gap:4px;flex:1}
+.sd{padding:1px 7px;border-radius:4px;font-size:10px;font-weight:600;background:#0d2818;color:#3fb950;border:1px solid #238636}
+.sf{padding:1px 7px;border-radius:4px;font-size:10px;font-weight:600;background:#2d0f0f;color:#f85149;border:1px solid #da3633}
+.sp{padding:1px 7px;border-radius:4px;font-size:10px;font-weight:600;background:#1c2128;color:#8b949e;border:1px solid #30363d}
+.smd{font-size:10.5px;color:#444c56}
+.dv{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}
+.vc{padding:11px 13px;border-radius:8px;border:1px solid}
+.vcd{background:#0d1b2e;border-color:#1f6feb}.vcs{background:#1a0e2e;border-color:#6e40c9}
+.vct{font-size:12px;font-weight:700;margin-bottom:3px}
+.vcd .vct{color:#58a6ff}.vcs .vct{color:#bc8cff}
+.vcdim{font-size:22px;font-weight:800;margin-bottom:3px}
+.vcd .vcdim{color:#58a6ff}.vcs .vcdim{color:#bc8cff}
+.vcdesc{font-size:11px;color:#8b949e;line-height:1.6}
+.hf{display:flex;align-items:center;gap:0;margin:10px 0}
+.hfc{display:flex;flex-direction:column;gap:6px}
+.hfn{padding:8px 12px;border-radius:7px;border:1px solid;font-size:11px;font-weight:600;text-align:center}
+.hfd{background:#0d1b2e;border-color:#1f6feb;color:#58a6ff}
+.hfs{background:#1a0e2e;border-color:#6e40c9;color:#bc8cff}
+.hfr{background:#0d2818;border-color:#238636;color:#3fb950;padding:14px 18px;font-size:14px;font-weight:800}
+.hfa{padding:0 10px;color:#444c56;font-size:18px;align-self:center}
+.ct{width:100%;border-collapse:collapse;font-size:11px;margin:8px 0}
+.ct thead th{background:#21262d;color:#8b949e;font-size:10px;text-transform:uppercase;letter-spacing:.4px;padding:5px 8px;text-align:left;border-bottom:1px solid #30363d}
+.ct tbody td{padding:6px 8px;border-bottom:1px solid #21262d;vertical-align:middle}
+.ct tbody tr:last-child td{border-bottom:none}.ct tbody tr:hover td{background:#1c2128}
+.ctc{font-family:monospace;color:#58a6ff}
+.f{display:inline-block;margin:1px 2px;padding:1px 5px;background:#21262d;border-radius:3px;color:#c9d1d9;font-family:monospace;font-size:10px}
+.fk{background:#0d1b2e;color:#58a6ff}.fa{background:#2d0f0f;color:#f85149;text-decoration:line-through}
+.qci{display:flex;align-items:flex-start;gap:8px;padding:7px 10px;background:#0d1117;border:1px solid #21262d;border-radius:7px;margin-bottom:5px}
+.qcl{flex-shrink:0;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;white-space:nowrap;margin-top:1px}
+.qclp{background:#9e6a03;color:#fff}.qclt{background:#1f6feb;color:#fff}.qclm{background:#238636;color:#fff}
+.qkw{font-size:11px;color:#8b949e;line-height:1.65}
+.kz{color:#e3b341}.ke{color:#58a6ff}
+.mg{display:flex;flex-direction:column;align-items:center;gap:0;padding:8px 0}
+.mgn{display:flex;align-items:center;justify-content:center;flex-direction:column;padding:9px 20px;border-radius:8px;border:1px solid;font-size:12px;font-weight:700;text-align:center}
+.mgsub{font-size:9px;color:#8b949e;font-weight:400;margin-top:2px}
+.mg-api{background:#2d1a00;border-color:#9e6a03;color:#e3b341;font-size:10px;padding:5px 12px}
+.mg-sup{background:#0d1b2e;border-color:#1f6feb;color:#58a6ff;min-width:220px}
+.mg-fin{background:#0d2818;border-color:#238636;color:#3fb950;min-width:230px}
+.mg-sse{background:#061e24;border-color:#1b6f74;color:#39c5cf;font-size:11px;min-width:230px}
+.mg-post{background:#21262d;border-color:#30363d;color:#c9d1d9;font-size:11px;flex:1}
+.mg-pre{background:#1a0e2e;border-color:#6e40c9;color:#bc8cff;font-size:11px;flex:1}
+.mg-qa{background:#0d2818;border-color:#238636;color:#3fb950;font-size:11px;flex:1}
+.mgarr{color:#444c56;font-size:18px;line-height:1;text-align:center;margin:2px 0}
+.mglbl{font-size:10px;color:#444c56;text-align:center;margin:2px 0}
+.sgrid{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin:8px 0}
+.sc{padding:6px 9px;background:#0d1117;border:1px solid #21262d;border-radius:6px}
+.sck{font-family:monospace;color:#ffa657;font-size:11px}
+.sct{color:#8b949e;font-size:10.5px;margin-left:3px}
+.scc{color:#3fb950;font-size:9.5px;display:block;margin-top:1px}
+.qaflow{display:flex;align-items:flex-start;gap:0;margin:12px 0;flex-wrap:wrap}
+.qanw{display:flex;flex-direction:column;align-items:center}
+.qan{padding:9px 13px;border-radius:8px;border:1px solid;font-size:11px;font-weight:700;text-align:center;min-width:95px}
+.qansub{font-size:9px;color:#8b949e;font-weight:400;margin-top:2px}
+.qanqr{background:#0d1b2e;border-color:#1f6feb;color:#58a6ff}
+.qanrg{background:#2d1a00;border-color:#9e6a03;color:#e3b341}
+.qanqc{background:#1a0e2e;border-color:#6e40c9;color:#bc8cff}
+.qanrr{background:#0d2818;border-color:#238636;color:#3fb950}
+.qanend{background:#21262d;border-color:#30363d;color:#8b949e;font-size:10px;min-width:50px;padding:7px 8px}
+.qaarr{display:flex;align-items:center;padding:0 5px;color:#444c56;font-size:16px;padding-bottom:10px}
+.qabw{display:flex;flex-direction:column;gap:5px;margin-top:26px;margin-left:4px}
+.qabr{display:flex;align-items:center;gap:5px;font-size:10.5px;color:#8b949e}
+.qabrt{padding:1px 7px;border-radius:4px;font-size:9.5px;font-weight:700}
+.qbtd{background:#0d1b2e;color:#58a6ff;border:1px solid #1f6feb}
+.qbtb{background:#2d0f0f;color:#f85149;border:1px solid #da3633}
+.qadc{display:flex;gap:9px;padding:8px 11px;background:#0d1117;border:1px solid #21262d;border-radius:7px;margin-bottom:5px}
+.qadcb{flex-shrink:0;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;white-space:nowrap;align-self:flex-start}
+.qadct{font-size:11px;color:#8b949e;line-height:1.65}
+.chain{display:flex;flex-direction:column;gap:0;margin:10px 0}
+.cs{display:flex;align-items:flex-start;gap:10px;padding:9px 12px;background:#0d1117;border:1px solid #21262d;border-bottom:none}
+.cs:first-child{border-radius:8px 8px 0 0}.cs:last-child{border-radius:0 0 8px 8px;border-bottom:1px solid #21262d}
+.csnum{width:20px;height:20px;border-radius:50%;border:2px solid;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;margin-top:1px}
+.csnb{border-color:#1f6feb;color:#58a6ff;background:#0d1b2e}
+.csnp{border-color:#6e40c9;color:#bc8cff;background:#1a0e2e}
+.csno{border-color:#9e6a03;color:#e3b341;background:#2d1a00}
+.csng{border-color:#238636;color:#3fb950;background:#0d2818}
+.cst{font-size:12px;font-weight:700;color:#c9d1d9;margin-bottom:3px}
+.csd{font-size:11px;color:#8b949e;line-height:1.65}
+.cscon{width:1px;height:10px;background:#30363d;margin-left:19px}
+.rd{display:flex;align-items:flex-start;gap:8px;padding:6px 10px;background:#0d1117;border:1px solid #21262d;border-radius:6px;margin-bottom:4px}
+.rdl{flex-shrink:0;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;white-space:nowrap;align-self:flex-start;margin-top:1px}
+.rdlm{background:#238636;color:#fff}.rdlt{background:#1f6feb;color:#fff}.rdlp{background:#9e6a03;color:#fff}
+.rdd{font-size:11px;color:#8b949e;line-height:1.6}
+.rchain{display:flex;flex-direction:column;gap:0;margin:10px 0}
+.rc{display:grid;grid-template-columns:26px 1fr;gap:8px;padding:8px 12px 8px 10px;background:#0d1117;border:1px solid #21262d;border-bottom:none}
+.rc:first-child{border-radius:8px 8px 0 0}.rc:last-child{border-radius:0 0 8px 8px;border-bottom:1px solid #21262d}
+.rci{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;margin-top:2px}
+.rci1{background:#1f6feb;color:#fff}.rci2{background:#6e40c9;color:#fff}.rci3{background:#9e6a03;color:#fff}.rci4{background:#238636;color:#fff}
+.rct{font-size:12px;font-weight:700;color:#c9d1d9;margin-bottom:3px}
+.rcd{font-size:11px;color:#8b949e;line-height:1.65}
+.rcr{display:flex;align-items:center;gap:6px;padding:4px 7px;background:#161b22;border:1px solid #21262d;border-radius:5px;font-size:10.5px;margin-top:3px}
+.rcrt{flex-shrink:0;padding:1px 6px;border-radius:3px;font-size:9.5px;font-weight:700}
+.rcrtc{background:#238636;color:#fff}.rcrtd{background:#1f6feb;color:#fff}.rcrtb{background:#da3633;color:#fff}
+.rcrfn{font-family:monospace;color:#d2a8ff;font-size:10.5px}
+.tt{width:100%;border-collapse:collapse;font-size:12px}
+.tt thead th{background:#21262d;color:#8b949e;font-size:10px;text-transform:uppercase;letter-spacing:.4px;padding:7px 10px;text-align:left;border-bottom:1px solid #30363d}
+.tt tbody td{padding:8px 10px;border-bottom:1px solid #21262d;vertical-align:middle}
+.tt tbody tr:last-child td{border-bottom:none}.tt tbody tr:hover td{background:#1c2128}
+.ttn{font-weight:600;color:#e6edf3}.ttr{color:#8b949e;font-size:11.5px}
+</style>
+</head>
+<body>
+<!-- HEADER -->
+<div class="ph">
+  <div>
+    <div class="ph-logo"><span>Alo</span>FootMind &mdash; System Design</div>
+    <div class="ph-sub">系统设计文档 &nbsp;·&nbsp; ETL 数据管道 &nbsp;·&nbsp; 向量检索层（RAG）&nbsp;·&nbsp; Multi-Agent 架构 &nbsp;·&nbsp; 三个应用层实现</div>
+  </div>
+  <div style="display:flex;gap:7px;margin-left:auto;flex-wrap:wrap">
+    <span class="t to">StatsBomb</span><span class="t tb">Milvus</span><span class="t to">PostgreSQL</span>
+    <span class="t tr">Redis</span><span class="t tp">DeepSeek</span>
+    <span class="t" style="background:#061e24;color:#39c5cf;border-color:#1b6f74">LangGraph</span>
+    <span class="t tg">FastAPI + SSE</span>
+  </div>
+</div>
+<!-- ROW1: ETL + RAG -->
+<div class="grid-2">
+<!-- S1: ETL -->
+<div class="card">
+  <div class="sh"><span class="sn ng">1</span><h2>ETL 数据管道与 RAG 语料体系</h2></div>
+  <div class="sub">
+    <h3>1.1 数据源与整体链路</h3>
+    <p>数据来源 <strong>StatsBomb Open Data</strong>，本地 JSON，覆盖 30+ 赛事。ETL 将结构化事件数据转换为三层 RAG 语料，幂等写入三层存储。</p>
+    <div class="pipe">
+      <div class="pipe-src">
+        <div class="pipe-src-t">📂 StatsBomb JSON</div>
+        <div class="pf">📋&nbsp;competitions/*.json</div>
+        <div class="pf">📅&nbsp;matches/{comp}/{season}.json</div>
+        <div class="pf">⚡&nbsp;events/{match_id}.json</div>
+        <div class="pf">👥&nbsp;lineups/{match_id}.json</div>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-steps">
+        <div style="display:flex;align-items:center"><div class="ps ps1" style="flex:1">🔍 step_parse<div class="psd">解析原始 JSON，构建 match_record，lineup / events_agg</div></div><span class="pcon">→</span></div>
+        <div style="display:flex;align-items:center"><div class="ps ps2" style="flex:1">🧠 step_embed<div class="psd">生成三层语料向量，写入 Milvus</div></div><span class="pcon">→</span></div>
+        <div style="display:flex;align-items:center"><div class="ps ps3" style="flex:1">🗄️ step_postgres<div class="psd">写入结构化数据到 PostgreSQL</div></div><span class="pcon">→</span></div>
+        <div style="display:flex;align-items:center"><div class="ps ps4" style="flex:1">🗑️ step_redis_invalidate<div class="psd">按 pattern 清除对应 RAG 缓存 key</div></div><span class="pcon" style="visibility:hidden">→</span></div>
+      </div>
+      <div class="pipe-stores">
+        <div class="store stm">🔵 Milvus<br><small style="font-size:9px;color:#8b949e;font-weight:400">向量检索</small></div>
+        <div class="store stp">🟠 PostgreSQL<br><small style="font-size:9px;color:#8b949e;font-weight:400">元数据/报告</small></div>
+        <div class="store str">🔴 Redis<br><small style="font-size:9px;color:#8b949e;font-weight:400">缓存/日志</small></div>
+      </div>
+    </div>
+  </div>
+  <div class="divider"></div>
+  <div class="sub">
+    <h3>1.2 三层 RAG 语料策略</h3>
+    <div class="lc">
+      <div class="lc-badge tb">Layer 1</div>
+      <div><div class="lc-name">match_summaries</div><div class="lc-meta"><span class="t tgr">一场一条</span><span class="t tp">LLM · DeepSeek</span></div><div class="lc-desc">跨事件整体理解，需要跨越数百条事件提炼语义，选用 LLM 生成自然语言摘要赋予语义检索能力。</div></div>
+    </div>
+    <div class="lc">
+      <div class="lc-badge tp">Layer 2</div>
+      <div><div class="lc-name">tactical_segments</div><div class="lc-meta"><span class="t tgr">possession 切片</span><span class="t to">规则模板</span></div><div class="lc-desc">按 possession 切片，提取事件类型序列（Shot / Dribble / Carry / Under Pressure）、起止时间、场地分区（x: 0-40-80-120）。内容高度规律，<strong>避免 LLM 幻觉</strong>。</div></div>
+    </div>
+    <div class="lc" style="margin-bottom:0">
+      <div class="lc-badge to">Layer 3</div>
+      <div><div class="lc-name">player_profiles</div><div class="lc-meta"><span class="t tgr">一人一条 · 赛季聚合</span><span class="t tp">LLM · DeepSeek</span></div><div class="lc-desc">全赛季导入完成后 <code>ingest_player_profiles()</code> 跨场聚合 <code>aggregate_player_season_stats</code>，保证 profile 包含<strong>赛季全量视角</strong>。</div></div>
+    </div>
+  </div>
+  <div class="divider"></div>
+  <div class="sub">
+    <h3>1.3 幂等设计：ingestion_log 四步状态机</h3>
+    <p>每场比赛在 <code>ingestion_log</code> 维护四个独立状态位，支持任意步骤<strong>断点续跑</strong>。</p>
+    <div style="margin-top:8px">
+      <div class="smr"><span class="smn">step_parse</span><span class="sms"><span class="sd">done</span><span class="sf">failed</span><span class="sp">pending</span></span><span class="smd">解析原始 JSON → match_record</span></div>
+      <div class="smr"><span class="smn">step_embed</span><span class="sms"><span class="sd">done</span><span class="sf">failed</span><span class="sp">pending</span></span><span class="smd">← 写 Milvus 三层向量</span></div>
+      <div class="smr"><span class="smn">step_postgres</span><span class="sms"><span class="sd">done</span><span class="sf">failed</span><span class="sp">pending</span></span><span class="smd">← 写关系库</span></div>
+      <div class="smr"><span class="smn">step_redis_invalidate</span><span class="sms"><span class="sd">done</span><span class="sf">failed</span><span class="sp">pending</span></span><span class="smd">← 清 Redis key</span></div>
+    </div>
+    <div class="info g" style="margin-top:8px">每步前检查 <code>is_step_done()</code>；成功 → <code>mark_step("done")</code>；失败 → <code>mark_step("failed",err)</code> 并 return 跳过后续。重跑自动从第一个非 done 步续行。完成后按 <code>rag:*:match:{id}:*</code> 清 Redis。</div>
+  </div>
+</div>
+<!-- S2: RAG -->
+<div class="card">
+  <div class="sh"><span class="sn nb">2</span><h2>向量检索层（RAG Service）</h2></div>
+  <div class="sub">
+    <h3>2.1 嵌入模型：BAAI/bge-m3 双向量</h3>
+    <div class="dv">
+      <div class="vc vcd"><div class="vct">Dense Vector</div><div class="vcdim">1024 维</div><div class="vcdesc">语义相似度 · COSINE 距离<br>捕捉上下文语义，适合开放式查询、模糊意图匹配</div></div>
+      <div class="vc vcs"><div class="vct">Sparse Vector</div><div class="vcdim">BM25-like</div><div class="vcdesc">词频精确匹配 · IP 距离<br>适合专有名词：球员姓名、战术术语、赛事缩写</div></div>
+    </div>
+    <div class="info">选用 bge-m3：<strong>单模型原生支持两种向量</strong>，无需维护两套模型；中英文跨语言检索，天然适配双语场景。</div>
+  </div>
+  <div class="sub">
+    <h3>2.2 Milvus Hybrid Search（RRF 融合）</h3>
+    <div class="hf">
+      <div class="hfc">
+        <div class="hfn hfd">AnnSearchRequest<br><small style="font-size:9px;opacity:.8">dense_vector · COSINE · ef=80</small></div>
+        <div class="hfn hfs">AnnSearchRequest<br><small style="font-size:9px;opacity:.8">sparse_vector · IP · drop=0.2</small></div>
+      </div>
+      <div class="hfa">→</div>
+      <div class="hfc" style="justify-content:center">
+        <div class="hfn hfr">RRFRanker()<br><span style="font-size:10px;font-weight:400;color:#8b949e">Reciprocal Rank Fusion</span></div>
+        <div style="font-size:10px;color:#8b949e;text-align:center;margin-top:4px">不依赖分数量纲<br>直接融合两路排名</div>
+      </div>
+      <div class="hfa">→</div>
+      <div class="hfc" style="justify-content:center">
+        <div class="hfn" style="background:#161b22;border-color:#30363d;color:#c9d1d9;padding:14px">Top-K Results<br><span style="font-size:10px;color:#8b949e">按 RRF score 排序返回</span></div>
+      </div>
+    </div>
+    <div class="info"><strong>同步 SDK 异步处理</strong>：pymilvus 通过 <code>asyncio.run_in_executor(None, _hybrid_search)</code> 在线程池执行，外层 <code>wait_for(timeout=20s)</code> 防止阻塞事件循环。</div>
+  </div>
+  <div class="divider"></div>
+  <div class="sub">
+    <h3>2.3 Collection 级过滤隔离（build_milvus_filter）</h3>
+    <table class="ct">
+      <thead><tr><th>Collection</th><th>支持的过滤字段</th></tr></thead>
+      <tbody>
+        <tr><td class="ctc">match_summaries</td><td><span class="f fk">match_id</span><span class="f fk">match_ids</span><span class="f">competition_id</span><span class="f">season_id</span></td></tr>
+        <tr><td class="ctc">tactical_segments</td><td><span class="f fk">match_id</span><span class="f fk">match_ids</span><span class="f">competition_id</span><span class="f">season_id</span><span class="f">team_id</span></td></tr>
+        <tr><td class="ctc">player_profiles</td><td><span class="f fk">player_id</span><span class="f fk">player_ids</span><span class="f">competition_id</span><span class="f">season_id</span><span class="f">team_id</span><span class="f fa">match_id</span></td></tr>
+      </tbody>
+    </table>
+    <div class="info r"><code>player_profiles</code> 无 match_id 字段，<code>retrieve()</code> 构造 player_level 过滤时自动剥离 match_id/match_ids，只传 player_ids，避免 Milvus 报错。</div>
+  </div>
+  <div class="divider"></div>
+  <div class="sub">
+    <h3>2.4 Query 分类器（classify_query）</h3>
+    <div class="qci"><span class="qcl qclp">player_level</span><div class="qkw"><span class="kz">球员 · 前锋 · 中场 · 后卫 · 助攻 · 进球</span><br><span class="ke">player · striker · midfielder · goal scorer · assist</span></div></div>
+    <div class="qci"><span class="qcl qclt">tactical_level</span><div class="qkw"><span class="kz">战术 · 阵型 · 控球 · xG · 压迫 · 反击</span><br><span class="ke">tactic · formation · possession · pressing · xg</span></div></div>
+    <div class="qci"><span class="qcl qclm">match_level</span><div class="qkw"><span class="kz">比赛 · 赛事 · 结果 · 比分 · 复盘</span><br><span class="ke">match · result · score · fixture · competition</span></div></div>
+    <div class="info">多维度时返回多个 level，<code>retrieve()</code> 对每个 level 独立检索后合并按 score 降序，取 <code>top_k × len(levels)</code> 条。未匹配 fallback → <code>tactical_level</code>。</div>
+  </div>
+  <div class="divider"></div>
+  <div class="sub">
+    <h3>2.5 Redis RAG 缓存</h3>
+    <div style="display:flex;gap:8px;margin:8px 0">
+      <div style="flex:1;padding:10px 13px;background:#2d0f0f;border:1px solid #da3633;border-radius:8px"><div style="font-size:11px;font-weight:700;color:#f85149;margin-bottom:5px">Cache Key</div><div style="font-family:monospace;font-size:10.5px;color:#8b949e">MD5(query | collection<br>| filter_expr | top_k)</div></div>
+      <div style="flex:1;padding:10px 13px;background:#2d1a00;border:1px solid #9e6a03;border-radius:8px;text-align:center"><div style="font-size:11px;font-weight:700;color:#e3b341;margin-bottom:2px">TTL</div><div style="font-size:26px;font-weight:800;color:#e3b341">600s</div><div style="font-size:10px;color:#8b949e">命中缓存绕过 Milvus</div></div>
+      <div style="flex:1;padding:10px 13px;background:#0d2818;border:1px solid #238636;border-radius:8px"><div style="font-size:11px;font-weight:700;color:#3fb950;margin-bottom:5px">主动失效</div><div style="font-size:10.5px;color:#8b949e">ETL 完成后按<br><code>rag:*:match:{id}:*</code><br>pattern 清除相关 key</div></div>
+    </div>
+  </div>
+</div>
+</div><!-- /grid-2 row1 -->
+<!-- S3: Multi-Agent -->
+<div style="margin-bottom:16px">
+<div class="card">
+  <div class="sh"><span class="sn np">3</span><h2>Multi-Agent 核心架构</h2></div>
+  <div class="grid-2">
+    <!-- 3.1 Main Graph DOM -->
+    <div>
+      <h3>3.1 主图（Main Graph）— DOM 结构图</h3>
+      <div class="mg">
+        <div class="mgn mg-api">📡 API Request</div>
+        <div class="mgarr">↓</div>
+        <div class="mgn mg-sup">🎯 supervisor<div class="mgsub">设置 task_id : status = running</div></div>
+        <div class="mgarr">↓</div>
+        <div class="mglbl">条件路由（request_type）</div>
+        <!-- connector top bar -->
+        <div style="position:relative;width:80%;height:14px">
+          <div style="position:absolute;left:16%;right:16%;top:50%;height:1px;background:#d0d7de"></div>
+          <div style="position:absolute;left:16%;top:50%;bottom:0;width:1px;background:#d0d7de"></div>
+          <div style="position:absolute;left:50%;top:50%;bottom:0;width:1px;background:#d0d7de;transform:translateX(-50%)"></div>
+          <div style="position:absolute;right:16%;top:50%;bottom:0;width:1px;background:#d0d7de"></div>
+        </div>
+        <!-- three sub-graphs -->
+        <div style="display:flex;gap:10px;width:80%">
+          <div class="mgn mg-post" style="flex:1">📊 post_match<div class="mgsub">Sub-graph</div></div>
+          <div class="mgn mg-pre" style="flex:1">🔮 pre_match<div class="mgsub">Sub-graph</div></div>
+          <div class="mgn mg-qa" style="flex:1">💬 qa<div class="mgsub">Sub-graph</div></div>
+        </div>
+        <!-- connector bottom bar -->
+        <div style="position:relative;width:80%;height:14px">
+          <div style="position:absolute;left:16%;right:16%;top:0;height:1px;background:#d0d7de"></div>
+          <div style="position:absolute;left:16%;top:0;height:14px;width:1px;background:#d0d7de"></div>
+          <div style="position:absolute;left:50%;top:0;height:14px;width:1px;background:#d0d7de;transform:translateX(-50%)"></div>
+          <div style="position:absolute;right:16%;top:0;height:14px;width:1px;background:#d0d7de"></div>
+        </div>
+        <div class="mgarr">↓</div>
+        <div class="mgn mg-fin">✅ finalize<div class="mgsub">写 task:result + status = completed</div></div>
+        <div class="mgarr">↓</div>
+        <div class="mgn mg-sse">📡 SSE Stream → Frontend<div class="mgsub">GET /api/tasks/{task_id}/stream · Redis RPUSH push_step()</div></div>
+      </div>
+      <div class="info" style="margin-top:8px">每个子图作为主图单一节点，通过 <code>get_main_graph()</code> <strong>懒加载单例</strong>，避免启动开销。Agent 节点通过 <code>push_step()</code> 将日志 RPUSH 到 Redis，前端 SSE 实时消费实现执行可视化。</div>
+      <div class="divider"></div>
+      <h3 class="g">共享状态 AnalysisState（TypedDict）</h3>
+      <div class="sgrid">
+        <div class="sc"><span class="sck">task_id</span><span class="sct">str</span></div>
+        <div class="sc"><span class="sck">request_type</span><span class="sct">Literal[3 types]</span></div>
+        <div class="sc"><span class="sck">match_id</span><span class="sct">int | None</span></div>
+        <div class="sc"><span class="sck">team_ids</span><span class="sct">list[int] | None</span></div>
+        <div class="sc"><span class="sck">query</span><span class="sct">str | None</span></div>
+        <div class="sc"><span class="sck">conversation_history</span><span class="sct">list[dict] | None</span></div>
+        <div class="sc"><span class="sck">rag_context</span><span class="sct">list[dict]</span><span class="scc">RAG 检索结果</span></div>
+        <div class="sc"><span class="sck">analysis_result</span><span class="sct">dict | None</span><span class="scc">子图中间产物</span></div>
+        <div class="sc"><span class="sck">report_markdown</span><span class="sct">str | None</span><span class="scc">最终生成报告</span></div>
+        <div class="sc"><span class="sck">step_log</span><span class="sct">list[StepLogEntry]</span><span class="scc">→ Redis → SSE</span></div>
+        <div class="sc"><span class="sck">language</span><span class="sct">str</span></div>
+        <div class="sc"><span class="sck">user_id</span><span class="sct">int | None</span></div>
+      </div>
+    </div>
+    <!-- 3.2 QA Sub-graph -->
+    <div>
+      <h3>3.2 QA Sub-graph — 节点流（路由 + 检索图）</h3>
+      <div class="qaflow">
+        <div class="qanw"><div class="qan qanqr">query_rewrite<div class="qansub">实体识别 · 中→英改写</div></div></div>
+        <div class="qaarr">→</div>
+        <div class="qanw"><div class="qan qanrg">relevance_gate<div class="qansub">双计数器路由决策</div></div></div>
+        <div class="qaarr">→</div>
+        <div class="qanw"><div class="qan qanqc">query_classify<div class="qansub">多维意图分类</div></div></div>
+        <div class="qaarr">→</div>
+        <div class="qanw"><div class="qan qanrr">rag_retrieval<div class="qansub">按 level 检索合并</div></div></div>
+        <div class="qaarr">→</div>
+        <div class="qanw"><div class="qan qanend">END</div></div>
+        <div class="qabw">
+          <div class="qabr">↓&nbsp;<span class="qabrt qbtd">direct_answer</span>&nbsp;→ END（闲聊 ≤3轮）</div>
+          <div class="qabr">↓&nbsp;<span class="qabrt qbtb">boundary_answer</span>&nbsp;→ END（边界提示）</div>
+        </div>
+      </div>
+      <div class="qadc">
+        <span class="qadcb" style="background:#1f6feb;color:#fff">query_rewrite</span>
+        <div class="qadct">启动时从 PostgreSQL 加载实体字典 <code>_ENTITY_DICT</code>（内存缓存），<strong>最长子串匹配</strong>提取足球实体。命中实体或 query 含中文 → DeepSeek（temp=0.1, max_tokens=100）映射标准英文检索词，输出 <code>rewritten_query</code>。LLM 失败优雅降级为原始 query。</div>
+      </div>
+      <div class="qadc">
+        <span class="qadcb" style="background:#9e6a03;color:#fff">relevance_gate</span>
+        <div class="qadct"><strong>双计数器</strong>：<code>football_intent_count</code> + <code>generic_turn_count</code>。有足球实体/关键词 → <code>classify</code>（重置 generic 计数）；无实体且 generic ≤ 3 → <code>direct_answer</code>（允许轻量闲聊）；无实体且 generic &gt; 3 → <code>boundary_answer</code>（边界提示）。</div>
+      </div>
+      <div class="qadc">
+        <span class="qadcb" style="background:#6e40c9;color:#fff">rag_retrieval</span>
+        <div class="qadct">按 <code>query_levels</code> 调用 <code>retrieve()</code>，使用改写后 query 和实体 ID 过滤，返回 <code>rag_context</code>。多 level 独立检索后合并按 score 降序。</div>
+      </div>
+      <div class="qadc">
+        <span class="qadcb" style="background:#238636;color:#fff">Endpoint 流式生成</span>
+        <div class="qadct">graph 返回后 endpoint 读取 <code>_route</code> 分三路调用异步 generator。<strong>System Prompt 三层分离</strong>：用户画像注入顶部 + RAG 上下文注入 Human 消息 + 最近 20 轮历史。解决"RAG 上下文污染对话记忆"。每轮结束后 messages + qa_meta 回写 PostgreSQL JSONB，下轮恢复意图计数状态。</div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+<!-- S4: Application Layers -->
+<div class="grid-3">
+<!-- 4.1 post_match -->
+<div class="card">
+  <div class="sh"><span class="sn no">4.1</span><h2>赛后复盘（post_match）</h2></div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+    <span class="t tb">POST /api/post-match</span><span class="t tgr">→ task_id → SSE</span>
+  </div>
+  <p>用户选择一场已导入比赛，后台异步任务，前端 SSE 实时消费 Agent 执行日志。</p>
+  <h3 style="margin-top:12px">Sub-graph 链路</h3>
+  <div class="chain">
+    <div class="cs"><div class="csnum csnb">1</div><div><div class="cst">fetch_match_data</div><div class="csd">SQL: <code>matches JOIN teams JOIN events_aggregated</code><br>获取比赛元数据 + key_events_json</div></div></div>
+    <div class="cscon"></div>
+    <div class="cs"><div class="csnum csnp">2</div><div><div class="cst">rag_retrieval（当场比赛维度）</div><div class="csd">
+      <div class="rd"><span class="rdl rdlt">tactical</span><div class="rdd">retrieve(match_id=current_id, top_k=8)</div></div>
+      <div class="rd" style="margin-bottom:0"><span class="rdl rdlp">player</span><div class="rdd">retrieve(player_ids=<code>extract_key_players(5)</code>, top_k=10)</div></div>
+    </div></div></div>
+    <div class="cscon"></div>
+    <div class="cs"><div class="csnum csno">3</div><div><div class="cst">tactical_analysis</div><div class="csd">DeepSeek LLM，注入比赛统计 + RAG 上下文（最多 20 条），输出结构化 Markdown 报告（比赛概述 / 战术阵型 / 关键时刻 / 球员亮点 / 战术总结）</div></div></div>
+    <div class="cscon"></div>
+    <div class="cs"><div class="csnum csng">4</div><div><div class="cst">report_generation</div><div class="csd">持久化到 <code>analysis_reports</code> 表（report_type='post_match'）</div></div></div>
+  </div>
+  <div class="info g" style="margin-top:8px"><strong>RAG 策略</strong>：只检索当场，不引入历史对比。<br><strong>extract_key_players()</strong>：Goal×3, Assist×2, Red Card×2, Key Pass×1.5, Yellow Card×1，提取 Top-5 球员 ID 定向检索画像。</div>
+</div>
+<!-- 4.2 pre_match -->
+<div class="card">
+  <div class="sh"><span class="sn no">4.2</span><h2>赛前情报（pre_match）</h2></div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+    <span class="t tb">POST /api/pre-match</span><span class="t tgr">三维度 RAG</span>
+  </div>
+  <p>用户选择主客队，RAG 检索维度比 post_match 更广——涵盖 H2H 历史、主队近况、客队近况。</p>
+  <h3 style="margin-top:12px">Sub-graph 链路</h3>
+  <div class="chain">
+    <div class="cs"><div class="csnum csnb">1</div><div><div class="cst">fetch_team_history</div><div class="csd">SQL: 查询两队最近 10 场交锋（h2h_matches），含阵型、比分、射门数</div></div></div>
+    <div class="cscon"></div>
+    <div class="cs"><div class="csnum csnp">2</div><div><div class="cst">rag_retrieval（三维度）</div><div class="csd">
+      <div class="rd"><span class="rdl rdlm">match</span><div class="rdd">retrieve(match_ids=[h2h_latest], top_k=2)，仅取最近一场 H2H 摘要</div></div>
+      <div class="rd"><span class="rdl rdlt">tactical</span><div class="rdd">retrieve([h2h_latest, home_last, away_last], top_k=8)，H2H + 主客队近况</div></div>
+      <div class="rd" style="margin-bottom:0"><span class="rdl rdlp">player</span><div class="rdd">retrieve(player_ids=dedup(h2h+home+away), top_k=10)，三场关键球员合并去重</div></div>
+    </div></div></div>
+    <div class="cscon"></div>
+    <div class="cs"><div class="csnum csng">3</div><div><div class="cst">matchup_analysis</div><div class="csd">DeepSeek LLM，基于 H2H 历史 + RAG 上下文生成赛前情报报告（主队优势 / 客队优势 / 关键对决 / 战术预测）</div></div></div>
+  </div>
+  <div class="info o" style="margin-top:8px"><strong>降级策略</strong>：若两队无历史交锋，match_level 检索跳过，tactical_level 降级为仅主客队各自最近一场。</div>
+</div>
+<!-- 4.3 aichat -->
+<div class="card">
+  <div class="sh"><span class="sn no">4.3</span><h2>AI 问答（aichat）</h2></div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+    <span class="t tr">不走主图</span><span class="t tg">直接流式 SSE</span><span class="t tgr">无 task_id</span>
+  </div>
+  <p>直接由 <code>POST /api/chat</code> 调用 <code>build_qa_graph()</code>，全程流式 SSE，不经过 supervisor / finalize。</p>
+  <h3 style="margin-top:12px">完整请求链路</h3>
+  <div class="rchain">
+    <div class="rc"><div class="rci rci1">1</div><div><div class="rct">会话恢复</div><div class="rcd">若有 session_id，从 <code>chat_sessions</code> 加载 messages + qa_meta（含双计数器状态）</div></div></div>
+    <div class="rc"><div class="rci rci2">2</div><div><div class="rct">qa_graph.ainvoke(state, timeout=30s)</div><div class="rcd">query_rewrite → relevance_gate → [classify → query_classify → rag_retrieval] | END<br>返回: { _route, rag_context, qa_meta }</div></div></div>
+    <div class="rc"><div class="rci rci3">3</div><div><div class="rct">StreamingResponse(_generate())</div><div class="rcd">按 _route 分三路 async generator：</div>
+      <div class="rcr"><span class="rcrt rcrtc">classify</span><span class="rcrfn">stream_answer(query, rag_context, history)</span><span style="color:#8c959f;font-size:10px;margin-left:4px">RAG增强</span></div>
+      <div class="rcr"><span class="rcrt rcrtd">direct_answer</span><span class="rcrfn">stream_direct_answer(query, history)</span><span style="color:#8c959f;font-size:10px;margin-left:4px">轻量闲聊</span></div>
+      <div class="rcr"><span class="rcrt rcrtb">boundary</span><span class="rcrfn">stream_boundary_answer(query, history)</span><span style="color:#8c959f;font-size:10px;margin-left:4px">边界提示</span></div>
+    </div></div>
+    <div class="rc"><div class="rci rci4">4</div><div><div class="rct">会话持久化（流结束后）</div><div class="rcd">UPDATE/INSERT <code>chat_sessions</code> SET messages=..., qa_meta=..., updated_at=NOW()<br>event: <code>done</code> { sources, qa_meta, session_id }<br><br>会话上限每用户 10 条（超限 429）。名称默认取首条消息前 30 字符。支持重命名 · 删除 · 中断（写入 system role cancelled 标记）。</div></div></div>
+  </div>
+</div>
+</div><!-- /grid-3 -->
+
+<!-- Tech Summary -->
+<div style="background:#161b22;border:1px solid #30363d;border-radius:12px;padding:18px 20px;margin-bottom:16px">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #21262d">
+    <span style="font-size:13px;font-weight:700;color:#e6edf3">⚙️ 技术选型总结</span>
+  </div>
+  <table class="tt">
+    <thead><tr><th>模块</th><th>技术</th><th>选型理由</th></tr></thead>
+    <tbody>
+      <tr><td class="ttn">向量数据库</td><td><span class="t tb">Milvus</span></td><td class="ttr">原生 Hybrid Search，支持 Dense+Sparse 双向量，Dockerized 部署</td></tr>
+      <tr><td class="ttn">嵌入模型</td><td><span class="t tg">BAAI/bge-m3</span></td><td class="ttr">单模型双向量，中英跨语言，无需额外 Sparse 引擎</td></tr>
+      <tr><td class="ttn">Agent 框架</td><td><span class="t tp">LangGraph</span></td><td class="ttr">状态机驱动，Sub-graph 隔离，方便独立测试各分析路径</td></tr>
+      <tr><td class="ttn">流式传输</td><td><span class="t to">Fetch API + SSE</span></td><td class="ttr">POST 请求传参（EventSource 仅支持 GET），token 级流式输出</td></tr>
+      <tr><td class="ttn">幂等控制</td><td><span class="t tb">ingestion_log 四步状态位</span></td><td class="ttr">轻量 Saga 模式，无需消息队列，断点续跑，可清晰阐述</td></tr>
+      <tr><td class="ttn">LLM 调用</td><td><span class="t tp">DeepSeek API</span></td><td class="ttr">成本约为 GPT-4o 的 1/20，批量 ETL 和实时对话统一使用</td></tr>
+      <tr><td class="ttn">关系存储</td><td><span class="t to">PostgreSQL</span></td><td class="ttr">赛事元数据、会话历史、分析报告，JSONB 存储 messages/qa_meta</td></tr>
+      <tr><td class="ttn">缓存</td><td><span class="t tr">Redis</span></td><td class="ttr">RAG 结果缓存（TTL 600s）+ Agent 执行日志列表 + 任务状态</td></tr>
+    </tbody>
+  </table>
+</div>
+</body>
+</html>
