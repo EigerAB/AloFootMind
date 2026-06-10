@@ -160,7 +160,7 @@ export default {
     resetTitle: 'Set New Password',
     resetSubtitle: 'Enter the code and your new password',
     email: 'Email',
-    emailPlaceholder: 'your@email.com',
+    emailPlaceholder: "your{'@'}email.com",
     password: 'Password',
     passwordPlaceholder: 'At least 6 characters',
     confirmPassword: 'Confirm Password',

@@ -160,7 +160,7 @@ export default {
     resetTitle: '重置密码',
     resetSubtitle: '输入验证码和新密码',
     email: '邮箱',
-    emailPlaceholder: 'your@email.com',
+    emailPlaceholder: "your{'@'}email.com",
     password: '密码',
     passwordPlaceholder: '至少 6 位字符',
     confirmPassword: '确认密码',
