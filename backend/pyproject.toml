@@ -23,6 +23,7 @@ dependencies = [
     "python-dotenv==1.0.1",
     "pydantic==2.10.4",
     "pydantic-settings==2.7.0",
+    "email-validator==2.2.0",
     "orjson==3.10.12",
     "numpy==2.2.1",
     "setuptools<72",
