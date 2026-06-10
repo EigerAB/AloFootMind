@@ -186,7 +186,7 @@
             ]"
           >EN</button>
         </div>
-        <p class="text-xs text-gray-600">{{ t('app.dataSource') }}</p>
+        <!-- <p class="text-xs text-gray-600">{{ t('app.dataSource') }}</p> -->
       </div>
     </aside>
 

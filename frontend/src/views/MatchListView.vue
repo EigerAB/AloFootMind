@@ -4,7 +4,7 @@
     <div class="px-6 pt-6 pb-4 shrink-0">
       <div class="mb-4 max-w-6xl mx-auto">
         <h2 class="text-2xl font-bold text-white">{{ t('matches.title') }}</h2>
-        <p class="text-gray-400 text-sm mt-1">{{ t('matches.subtitle') }}</p>
+        <!-- <p class="text-gray-400 text-sm mt-1">{{ t('matches.subtitle') }}</p> -->
       </div>
       <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-wrap gap-3 max-w-6xl mx-auto">
         <SearchableSelect
