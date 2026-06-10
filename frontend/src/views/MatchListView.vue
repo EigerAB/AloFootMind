@@ -7,15 +7,17 @@
         <p class="text-gray-400 text-sm mt-1">{{ t('matches.subtitle') }}</p>
       </div>
       <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-wrap gap-3 max-w-6xl mx-auto">
-        <select
-          v-model="selectedCompetitionKey"
-          class="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2 focus:ring-1 focus:ring-green-500 focus:outline-none"
-        >
-          <option value="">{{ t('matches.allCompetitions') }}</option>
-          <option v-for="c in competitionOptions" :key="c.key" :value="c.key">
-            {{ c.label }}
-          </option>
-        </select>
+        <SearchableSelect
+          v-model="selectedCompetition"
+          :options="competitionOptions"
+          :null-label="t('matches.allCompetitions')"
+          track-key="key"
+          display-key="label"
+          :placeholder="t('matches.allCompetitions')"
+          :searchable="false"
+          @select="onCompetitionSelect"
+          class="w-56"
+        />
         <input
           v-model="teamFilter"
           @keyup.enter="filterByTeam"
@@ -157,6 +159,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { api, type Competition, type Match } from '@/api'
+import SearchableSelect from '@/components/SearchableSelect.vue'
 
 const { t } = useI18n()
 const $router = useRouter()
@@ -166,7 +169,7 @@ const matches = ref<Match[]>([])
 const total = ref(0)
 const loading = ref(false)
 const error = ref<string | null>(null)
-const selectedCompetitionKey = ref('')
+const selectedCompetition = ref<{ key: string; label: string; competition_id: number; season_id: number } | null>(null)
 const teamFilter = ref('')
 const selectedTeamId = ref<number | undefined>()
 const currentPage = ref(1)
@@ -193,9 +196,14 @@ const competitionOptions = computed(() => {
 })
 
 function parseKey() {
-  if (!selectedCompetitionKey.value) return { competition_id: undefined, season_id: undefined }
-  const [cid, sid] = selectedCompetitionKey.value.split(':').map(Number)
-  return { competition_id: cid, season_id: sid }
+  if (!selectedCompetition.value) return { competition_id: undefined, season_id: undefined }
+  return { competition_id: selectedCompetition.value.competition_id, season_id: selectedCompetition.value.season_id }
+}
+
+function onCompetitionSelect() {
+  currentPage.value = 1
+  jumpPage.value = 1
+  loadMatches()
 }
 
 async function filterByTeam() {

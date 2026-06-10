@@ -11,16 +11,16 @@
         <!-- Home -->
         <div>
           <label class="block text-xs text-gray-500 mb-1.5">{{ t('preMatch.competition') }}</label>
-          <select
-            v-model="homeCompId"
-            @change="onCompetitionChange('home')"
-            class="w-full bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2 focus:ring-1 focus:ring-green-500 focus:outline-none mb-3"
-          >
-            <option :value="null" disabled>{{ t('preMatch.selectCompetition') }}</option>
-            <option v-for="c in hierarchy" :key="c.competition_id" :value="c.competition_id">
-              {{ c.competition_name }}
-            </option>
-          </select>
+          <SearchableSelect
+            v-model="homeComp"
+            :options="hierarchy"
+            :placeholder="t('preMatch.selectCompetition')"
+            track-key="competition_id"
+            display-key="competition_name"
+            :searchable="false"
+            @select="onCompetitionChange('home')"
+            class="mb-3"
+          />
 
           <label class="block text-xs text-gray-500 mb-1.5">{{ t('preMatch.homeTeam') }}</label>
           <SearchableSelect
@@ -37,16 +37,16 @@
         <!-- Away -->
         <div>
           <label class="block text-xs text-gray-500 mb-1.5">{{ t('preMatch.competition') }}</label>
-          <select
-            v-model="awayCompId"
-            @change="onCompetitionChange('away')"
-            class="w-full bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2 focus:ring-1 focus:ring-green-500 focus:outline-none mb-3"
-          >
-            <option :value="null" disabled>{{ t('preMatch.selectCompetition') }}</option>
-            <option v-for="c in hierarchy" :key="c.competition_id" :value="c.competition_id">
-              {{ c.competition_name }}
-            </option>
-          </select>
+          <SearchableSelect
+            v-model="awayComp"
+            :options="hierarchy"
+            :placeholder="t('preMatch.selectCompetition')"
+            track-key="competition_id"
+            display-key="competition_name"
+            :searchable="false"
+            @select="onCompetitionChange('away')"
+            class="mb-3"
+          />
 
           <label class="block text-xs text-gray-500 mb-1.5">{{ t('preMatch.awayTeam') }}</label>
           <SearchableSelect
@@ -81,9 +81,10 @@
         <h3 class="text-sm font-semibold text-gray-300">{{ t('preMatch.historyTitle') }}</h3>
         <button
           @click="showClearAllConfirm"
-          class="text-xs text-red-400 hover:text-red-300 transition-colors px-2 py-1 rounded hover:bg-red-900/20"
+          class="text-gray-400 hover:text-gray-300 transition-colors px-2 py-1 rounded hover:bg-gray-700/40"
+          :title="t('preMatch.clearAll')"
         >
-          {{ t('preMatch.clearAll') }}
+          <i class="iconfont icon-piliangshanchu" style="font-size: 16px;"></i>
         </button>
       </div>
       <div class="space-y-2">
@@ -105,9 +106,10 @@
             <div class="flex items-center gap-2 shrink-0 ml-2">
               <button
                 @click.stop="showDeleteConfirm(r.id, r.home_team_name, r.away_team_name)"
-                class="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded hover:bg-red-900/20 transition-colors"
+                class="text-gray-400 hover:text-gray-300 px-2 py-1 rounded hover:bg-gray-700/40 transition-colors"
+                :title="t('preMatch.delete')"
               >
-                {{ t('preMatch.delete') }}
+                <i class="iconfont icon-ashbin" style="font-size: 15px;"></i>
               </button>
               <svg
                 class="w-4 h-4 text-gray-500 transition-transform"
@@ -212,10 +214,12 @@ const showAuthModal = ref(false)
 
 const hierarchy = ref<CompetitionWithTeams[]>([])
 
-const homeCompId = ref<number | null>(null)
+const homeComp = ref<CompetitionWithTeams | null>(null)
+const homeCompId = computed(() => homeComp.value?.competition_id ?? null)
 const homeTeam = ref<Team | null>(null)
 
-const awayCompId = ref<number | null>(null)
+const awayComp = ref<CompetitionWithTeams | null>(null)
+const awayCompId = computed(() => awayComp.value?.competition_id ?? null)
 const awayTeam = ref<Team | null>(null)
 
 const isRunning = ref(false)
@@ -310,6 +314,7 @@ function onCompetitionChange(side: 'home' | 'away') {
     awayTeam.value = null
   }
 }
+
 
 function onTeamSelect(_side: 'home' | 'away') {
   // v-model handles the value; this hook can be used for side-effects if needed

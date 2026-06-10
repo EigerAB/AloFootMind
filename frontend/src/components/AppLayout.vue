@@ -68,7 +68,7 @@
                   class="p-0.5 text-gray-500 hover:text-green-400"
                   title="Rename"
                 >
-                  ✏️
+                  <i class="iconfont icon-edit" style="font-size: 22px;"></i>
                 </button>
                 <button
                   v-if="editingSessionId !== s.id && !showDeleteDialog"
@@ -76,30 +76,30 @@
                   class="p-0.5 text-gray-500 hover:text-red-400"
                   title="Delete"
                 >
-                  🗑️
+                  <i class="iconfont icon-ashbin" style="font-size: 22px;"></i>
                 </button>
               </div>
               <!-- Inline rename -->
               <div
                 v-if="editingSessionId === s.id"
-                class="absolute inset-x-0 top-0 bg-gray-800 rounded-md p-1 flex gap-1 z-10"
+                class="absolute inset-0 bg-gray-800 rounded-md px-1.5 flex items-center gap-0.5 z-10"
               >
                 <input
                   v-model="editingName"
                   @keydown.enter="confirmRename(s.id)"
                   @keydown.escape="editingSessionId = null"
-                  class="flex-1 bg-gray-900 border border-gray-700 rounded px-1.5 py-0.5 text-xs text-white focus:outline-none focus:border-green-500"
+                  class="flex-1 min-w-0 bg-gray-900 border border-gray-700 rounded px-1.5 py-1 text-xs text-white focus:outline-none focus:border-green-500"
                   autofocus
                 />
                 <button
                   @click="confirmRename(s.id)"
-                  class="text-xs text-green-400 hover:text-green-300 px-1"
+                  class="text-xs text-green-400 hover:text-green-300 px-0.5 shrink-0"
                 >
                   ✓
                 </button>
                 <button
                   @click="editingSessionId = null"
-                  class="text-xs text-gray-500 hover:text-gray-300 px-1"
+                  class="text-xs text-gray-500 hover:text-gray-300 px-0.5 shrink-0"
                 >
                   ✕
                 </button>
