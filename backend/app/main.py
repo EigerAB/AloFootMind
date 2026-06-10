@@ -57,7 +57,7 @@ app.include_router(analysis_router)
 async def health():
     from app.db.postgres import AsyncSessionLocal
     from app.db.redis_client import get_redis
-    from app.db.milvus_client import milvus_client
+    from app.db.milvus_client import get_collection as milvus_get_collection
 
     checks = {"status": "ok", "services": {}}
 
@@ -81,7 +81,7 @@ async def health():
 
     # Milvus
     try:
-        milvus_client.get_collection("test").description
+        milvus_get_collection("match_summaries").describe()
         checks["services"]["milvus"] = "ok"
     except Exception as e:
         checks["status"] = "degraded"
