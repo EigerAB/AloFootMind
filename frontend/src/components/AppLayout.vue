@@ -189,14 +189,29 @@
 
         <!-- Icon links -->
         <div class="flex items-center justify-around">
-          <a
-            href="/design.html"
-            target="_blank"
-            title="Design Doc"
-            class="text-gray-500 hover:text-green-400 transition-colors"
-          >
-            <i class="iconfont icon-shuomingshu" style="font-size: 20px;"></i>
-          </a>
+          <div class="relative">
+            <a
+              href="/design.html"
+              target="_blank"
+              title="Design Doc"
+              class="text-gray-500 hover:text-green-400 transition-colors"
+            >
+              <i class="iconfont icon-shuomingshu" style="font-size: 20px;"></i>
+            </a>
+            <Transition name="fade">
+              <div
+                v-if="showShuomingshuTooltip"
+                class="tooltip-box tooltip-float"
+              >
+                <button
+                  @click="closeShuomingshuTooltip"
+                  class="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-gray-600 text-white text-[10px] flex items-center justify-center hover:bg-gray-500 leading-none"
+                >×</button>
+                <span>点击预览项目设计报告</span>
+                <div class="tooltip-arrow"></div>
+              </div>
+            </Transition>
+          </div>
           <a
             href="https://github.com/EigerAB/AloFootMind"
             target="_blank"
@@ -277,7 +292,7 @@
         class="fixed inset-0 z-[100] flex items-center justify-center"
       >
         <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" @click="showImageModal = false"></div>
-        <div class="relative z-10 max-w-sm w-full mx-4">
+        <div class="relative z-10 max-w-md w-full mx-4 modal-float">
           <button
             @click="showImageModal = false"
             class="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-gray-700 border border-gray-600 text-white flex items-center justify-center hover:bg-gray-600 transition-colors z-20"
@@ -427,6 +442,9 @@ onMounted(() => {
   if (authStore.isLoggedIn) {
     chatStore.loadSessions()
   }
+  if (localStorage.getItem('tooltip-shuomingshu-closed') === 'true') {
+    showShuomingshuTooltip.value = false
+  }
 })
 </script>
 
@@ -438,5 +456,49 @@ onMounted(() => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+.tooltip-box {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  background: #15803d;
+  color: #fff;
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  z-index: 50;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.tooltip-float {
+  animation: tooltipFloat 2s ease-in-out infinite;
+}
+
+@keyframes tooltipFloat {
+  0%, 100% { transform: translateX(-20%) translateY(0); }
+  50% { transform: translateX(-20%) translateY(-4px); }
+}
+
+.tooltip-arrow {
+  position: absolute;
+  top: 100%;
+  left: 20%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid #15803d;
+}
+
+.modal-float {
+  animation: floatY 3s ease-in-out infinite;
+}
+
+@keyframes floatY {
+  0%, 100% { margin-top: 0; }
+  50% { margin-top: -2px; }
 }
 </style>
