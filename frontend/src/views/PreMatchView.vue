@@ -336,7 +336,7 @@ async function generateReport() {
 async function confirmAndGenerate() {
   showLimitDialog.value = false
   if (oldestReport.value) {
-    await deleteReport(oldestReport.value.id)
+    await executeDelete(oldestReport.value.id)
     oldestReport.value = null
   }
   await doGenerate()
