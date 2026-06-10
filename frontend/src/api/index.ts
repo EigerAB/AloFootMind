@@ -25,6 +25,12 @@ async function doRefresh(): Promise<string | null> {
       if (!res.ok) return null
       const data = await res.json()
       localStorage.setItem('access_token', data.access_token)
+      if (data.refresh_token) {
+        localStorage.setItem('refresh_token', data.refresh_token)
+      }
+      if (data.user) {
+        localStorage.setItem('user', JSON.stringify(data.user))
+      }
       return data.access_token as string
     } catch {
       return null
@@ -52,14 +58,18 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
   // Try refresh on 401 if we have a refresh token
   if (res.status === 401) {
+    const rtBefore = localStorage.getItem('refresh_token')
     const newToken = await doRefresh()
     if (newToken) {
       res = await makeRequest(newToken)
     } else {
-      // Refresh failed — clear auth state
-      localStorage.removeItem('access_token')
-      localStorage.removeItem('refresh_token')
-      localStorage.removeItem('user')
+      // Refresh failed — clear auth state only if no other tab updated the token
+      const rtAfter = localStorage.getItem('refresh_token')
+      if (rtAfter === rtBefore) {
+        localStorage.removeItem('access_token')
+        localStorage.removeItem('refresh_token')
+        localStorage.removeItem('user')
+      }
     }
   }
 
@@ -180,13 +190,16 @@ export const api = {
     ),
 
   refresh: (token: string) =>
-    request<{ access_token: string }>('/api/auth/refresh', {
+    request<{ access_token: string; refresh_token: string; user: User }>('/api/auth/refresh', {
       method: 'POST',
       body: JSON.stringify({ refresh_token: token }),
     }),
 
-  logout: () =>
-    request<{ message: string }>('/api/auth/logout', { method: 'POST' }),
+  logout: (refreshToken: string) =>
+    request<{ message: string }>('/api/auth/logout', {
+      method: 'POST',
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    }),
 
   forgotPassword: (body: { email: string }) =>
     request<{ message: string }>('/api/auth/forgot-password', {

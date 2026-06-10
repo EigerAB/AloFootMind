@@ -260,7 +260,8 @@ function handleLogout() {
 
 async function doLogout() {
   try {
-    await api.logout()
+    const rt = authStore.refreshToken ?? localStorage.getItem('refresh_token') ?? ''
+    await api.logout(rt)
   } catch {
     // ignore
   }

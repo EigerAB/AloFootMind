@@ -14,6 +14,8 @@ from app.core.security import (
     verify_password,
     get_current_user,
     get_current_user_optional,
+    revoke_refresh_token,
+    is_refresh_token_revoked,
 )
 from app.db.models import EmailVerificationCode, PasswordResetCode, User
 from app.db.postgres import get_db
@@ -39,6 +41,10 @@ class LoginRequest(BaseModel):
 
 
 class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class LogoutRequest(BaseModel):
     refresh_token: str
 
 
@@ -105,7 +111,7 @@ async def register(body: RegisterRequest, session: AsyncSession = Depends(get_db
     verification = EmailVerificationCode(
         email=body.email,
         code=code,
-        expires_at=datetime.utcnow() + timedelta(minutes=5),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
     )
     session.add(verification)
     await session.commit()
@@ -133,7 +139,7 @@ async def verify_email(body: VerifyEmailRequest, session: AsyncSession = Depends
         )
 
     # Check expiry
-    if datetime.utcnow() > verification.expires_at:
+    if datetime.now(timezone.utc) > verification.expires_at:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Code expired",
@@ -191,26 +197,40 @@ async def login(body: LoginRequest, session: AsyncSession = Depends(get_db)):
 
 
 @router.post("/refresh")
-async def refresh(body: RefreshRequest):
+async def refresh(body: RefreshRequest, session: AsyncSession = Depends(get_db)):
     payload = decode_refresh_token(body.refresh_token)
     if payload is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token",
         )
+    if await is_refresh_token_revoked(payload):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token has been revoked",
+        )
     user_id = int(payload["sub"])
-    # We don't hit the DB here for speed; just issue a new access token.
-    # The user info will be filled from the old payload if available,
-    # but for simplicity we return just the access token.
-    # In a real app, you'd look up the user to get current email/nickname.
-    access_token = create_access_token(user_id, "", "")
-    return {"access_token": access_token}
+    result = await session.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None or not user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or not verified",
+        )
+    # Rotation: revoke old refresh token and issue a new one
+    await revoke_refresh_token(body.refresh_token)
+    access_token = create_access_token(user.id, user.email, user.nickname)
+    new_refresh_token = create_refresh_token(user.id)
+    return {
+        "access_token": access_token,
+        "refresh_token": new_refresh_token,
+        "user": {"id": user.id, "email": user.email, "nickname": user.nickname},
+    }
 
 
 @router.post("/logout")
-async def logout(user: User = Depends(get_current_user)):
-    # Client-side only: frontend clears tokens.
-    # Server-side: optionally add token to a blocklist (Redis) for extra security.
+async def logout(body: LogoutRequest, user: User = Depends(get_current_user)):
+    await revoke_refresh_token(body.refresh_token)
     return {"message": "Logged out"}
 
 
@@ -238,7 +258,7 @@ async def forgot_password(body: ForgotPasswordRequest, session: AsyncSession = D
     reset = PasswordResetCode(
         user_id=user.id,
         code=code,
-        expires_at=datetime.utcnow() + timedelta(hours=1),
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
     )
     session.add(reset)
     await session.commit()
@@ -275,7 +295,7 @@ async def reset_password(body: ResetPasswordRequest, session: AsyncSession = Dep
         )
 
     # Check expiry
-    if datetime.utcnow() > reset.expires_at:
+    if datetime.now(timezone.utc) > reset.expires_at:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Code expired",

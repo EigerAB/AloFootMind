@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -11,6 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.db.models import User
 from app.db.postgres import get_db
+from app.db.redis_client import get_redis
+
+REFRESH_TOKEN_TTL_DAYS = 1
+_BLOCKLIST_PREFIX = "auth:blocklist:"
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -41,15 +46,40 @@ def create_access_token(user_id: int, email: str, nickname: str) -> str:
 
 
 def create_refresh_token(user_id: int) -> str:
-    """Create a long-lived refresh token (1 day)."""
+    """Create a long-lived refresh token (1 day) with a unique jti."""
     now = datetime.now(timezone.utc)
     payload = {
         "sub": str(user_id),
+        "jti": str(uuid.uuid4()),
         "iat": now,
-        "exp": now + timedelta(days=1),
+        "exp": now + timedelta(days=REFRESH_TOKEN_TTL_DAYS),
         "type": "refresh",
     }
     return jwt.encode(payload, settings.JWT_REFRESH_SECRET, algorithm="HS256")
+
+
+async def revoke_refresh_token(token: str) -> None:
+    """Add a refresh token's jti to the Redis blocklist."""
+    payload = decode_refresh_token(token)
+    if payload is None:
+        return
+    jti = payload.get("jti")
+    if not jti:
+        return
+    exp: datetime = payload["exp"] if isinstance(payload["exp"], datetime) else datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+    ttl = max(int((exp - datetime.now(timezone.utc)).total_seconds()), 0)
+    if ttl > 0:
+        redis = await get_redis()
+        await redis.set(f"{_BLOCKLIST_PREFIX}{jti}", "1", ex=ttl)
+
+
+async def is_refresh_token_revoked(payload: dict) -> bool:
+    """Return True if the refresh token's jti is on the blocklist."""
+    jti = payload.get("jti")
+    if not jti:
+        return False
+    redis = await get_redis()
+    return await redis.exists(f"{_BLOCKLIST_PREFIX}{jti}") == 1
 
 
 def decode_access_token(token: str) -> dict[str, Any] | None:
