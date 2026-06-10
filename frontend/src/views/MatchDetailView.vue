@@ -107,6 +107,7 @@
     </template>
   </div>
   <AuthModal v-model:visible="showAuthModal" />
+  <ToastNotification ref="toastRef" />
 </template>
 
 <script setup lang="ts">
@@ -119,6 +120,7 @@ import { useSseStream } from '@/composables/useSseStream'
 import AgentViewer from '@/components/AgentViewer.vue'
 import ReportViewer from '@/components/ReportViewer.vue'
 import AuthModal from '@/components/AuthModal.vue'
+import ToastNotification from '@/components/ToastNotification.vue'
 
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
@@ -143,6 +145,7 @@ const match = ref<MatchDetail | null>(null)
 const loading = ref(true)
 const analyzing = ref(false)
 const taskId = ref<string | null>(null)
+const toastRef = ref<InstanceType<typeof ToastNotification> | null>(null)
 const isRunning = ref(false)
 const stepLog = ref<any[]>([])
 const report = ref<string | null>(null)
@@ -171,9 +174,19 @@ function formatFormation(f: number) {
     .trim() || String(f)
 }
 
+const GUEST_TRIAL_MSG = '您当前是访客/体验客户，无法进行该操作'
+
+function showToast(message: string, type: 'success' | 'error' | 'info' = 'info') {
+  toastRef.value?.show(message, type)
+}
+
 async function triggerAnalysis() {
   if (!authStore.isLoggedIn) {
     showAuthModal.value = true
+    return
+  }
+  if (authStore.isGuest || authStore.isTrial) {
+    showToast(GUEST_TRIAL_MSG, 'error')
     return
   }
   analyzing.value = true

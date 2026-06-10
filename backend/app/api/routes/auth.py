@@ -1,11 +1,14 @@
+import json
 import random
+import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -19,6 +22,7 @@ from app.core.security import (
 )
 from app.db.models import EmailVerificationCode, PasswordResetCode, User
 from app.db.postgres import get_db
+from app.db.redis_client import get_redis
 from app.services.email import send_password_reset_code, send_verification_code
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -182,7 +186,19 @@ async def login(body: LoginRequest, session: AsyncSession = Depends(get_db)):
             detail="Email not verified",
         )
 
-    access_token = create_access_token(user.id, user.email, user.nickname)
+    # Block expired trial accounts
+    if user.role == "trial" and user.trial_expires_at:
+        if datetime.utcnow() > user.trial_expires_at:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Trial account has expired",
+            )
+
+    # First login for trial: clone template data
+    if user.role == "trial":
+        await _clone_template_data_if_needed(session, user)
+
+    access_token = create_access_token(user.id, user.email, user.nickname, user.role)
     refresh_token = create_refresh_token(user.id)
 
     return {
@@ -192,6 +208,7 @@ async def login(body: LoginRequest, session: AsyncSession = Depends(get_db)):
             "id": user.id,
             "email": user.email,
             "nickname": user.nickname,
+            "role": user.role,
         },
     }
 
@@ -217,14 +234,20 @@ async def refresh(body: RefreshRequest, session: AsyncSession = Depends(get_db))
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found or not verified",
         )
+    if user.role == "trial" and user.trial_expires_at:
+        if datetime.utcnow() > user.trial_expires_at:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Trial account has expired",
+            )
     # Rotation: revoke old refresh token and issue a new one
     await revoke_refresh_token(body.refresh_token)
-    access_token = create_access_token(user.id, user.email, user.nickname)
+    access_token = create_access_token(user.id, user.email, user.nickname, user.role)
     new_refresh_token = create_refresh_token(user.id)
     return {
         "access_token": access_token,
         "refresh_token": new_refresh_token,
-        "user": {"id": user.id, "email": user.email, "nickname": user.nickname},
+        "user": {"id": user.id, "email": user.email, "nickname": user.nickname, "role": user.role},
     }
 
 
@@ -314,4 +337,204 @@ async def me(user: User = Depends(get_current_user)):
         "id": user.id,
         "email": user.email,
         "nickname": user.nickname,
+        "role": user.role,
     }
+
+
+@router.post("/guest-login")
+async def guest_login(session: AsyncSession = Depends(get_db)):
+    """Create a temporary guest user and return tokens."""
+    email = f"guest-{uuid.uuid4().hex[:8]}@guest.local"
+    user = User(
+        email=email,
+        nickname="Guest",
+        password_hash=hash_password(uuid.uuid4().hex),
+        is_verified=True,
+        role="guest",
+    )
+    session.add(user)
+    await session.flush()
+    await session.commit()
+
+    access_token = create_access_token(user.id, user.email, user.nickname, user.role)
+    refresh_token = create_refresh_token(user.id)
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "nickname": user.nickname,
+            "role": user.role,
+        },
+    }
+
+
+class CreateTrialRequest(BaseModel):
+    admin_secret: str = ""
+
+
+@router.post("/create-trial")
+async def create_trial(
+    body: CreateTrialRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+):
+    """Create a trial user account with admin secret + IP-based rate limiting."""
+    if body.admin_secret != settings.TRIAL_ADMIN_SECRET or not settings.TRIAL_ADMIN_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid admin secret",
+        )
+
+    # Determine client IP
+    forwarded = request.headers.get("x-forwarded-for")
+    client_ip = forwarded.split(",")[0].strip() if forwarded else request.client.host
+    ip_key = f"trial:limit:{client_ip}"
+
+    redis = await get_redis()
+    count = int(await redis.get(ip_key) or 0)
+    if count >= 5:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Trial account creation limit reached for this IP. Try again later.",
+        )
+
+    password = uuid.uuid4().hex[:12]
+    email = f"trial-{uuid.uuid4().hex[:8]}@apollo.com"
+    user = User(
+        email=email,
+        nickname="Trial User",
+        password_hash=hash_password(password),
+        is_verified=True,
+        role="trial",
+        trial_expires_at=datetime.utcnow() + timedelta(minutes=15),
+    )
+    session.add(user)
+    await session.flush()
+    await session.commit()
+
+    # Increment IP counter
+    await redis.incr(ip_key)
+    await redis.expire(ip_key, 86400)
+
+    return {
+        "email": email,
+        "password": password,
+    }
+
+
+@router.post("/unfreeze-trial")
+async def unfreeze_trial(
+    email: str,
+    admin_secret: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Unfreeze (renew) a trial account — script-only endpoint."""
+    if admin_secret != settings.TRIAL_ADMIN_SECRET or not settings.TRIAL_ADMIN_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid admin secret",
+        )
+    result = await db.execute(select(User).where(User.email == email, User.role == "trial"))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trial user not found")
+    user.trial_expires_at = datetime.utcnow() + timedelta(minutes=15)
+    await db.commit()
+    return {"message": "Trial account unfrozen", "trial_expires_at": user.trial_expires_at.isoformat()}
+
+
+@router.delete("/delete-trial")
+async def delete_trial(
+    email: str,
+    admin_secret: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a trial account and all associated data — script-only endpoint."""
+    if admin_secret != settings.TRIAL_ADMIN_SECRET or not settings.TRIAL_ADMIN_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid admin secret",
+        )
+    result = await db.execute(select(User).where(User.email == email, User.role == "trial"))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trial user not found")
+
+    uid = user.id
+    # Cascade delete associated data
+    await db.execute(text("DELETE FROM chat_sessions WHERE user_id = :uid"), {"uid": uid})
+    await db.execute(text("DELETE FROM analysis_reports WHERE user_id = :uid"), {"uid": uid})
+    await db.execute(text("DELETE FROM password_reset_codes WHERE user_id = :uid"), {"uid": uid})
+    await db.execute(text("DELETE FROM email_verification_codes WHERE email = :email"), {"email": user.email})
+    await db.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": uid})
+    await db.commit()
+    return {"message": "Trial account and associated data deleted"}
+
+
+async def _template_user_id(db: AsyncSession) -> int | None:
+    result = await db.execute(select(User).where(User.email == settings.GUEST_TEMPLATE_EMAIL))
+    u = result.scalar_one_or_none()
+    return u.id if u else None
+
+
+async def _clone_template_data_if_needed(db: AsyncSession, user: User) -> None:
+    """Clone template user's chat_sessions and pre_match reports on first login."""
+    # Check if user already has any data
+    existing = await db.execute(
+        text("SELECT COUNT(*) FROM chat_sessions WHERE user_id = :uid"),
+        {"uid": user.id},
+    )
+    if existing.scalar_one() > 0:
+        return
+
+    template_uid = await _template_user_id(db)
+    if template_uid is None:
+        return
+
+    # Clone chat_sessions
+    sessions = await db.execute(
+        text("SELECT name, messages, qa_meta FROM chat_sessions WHERE user_id = :uid"),
+        {"uid": template_uid},
+    )
+    for row in sessions.mappings().all():
+        await db.execute(
+            text("""
+                INSERT INTO chat_sessions (user_id, name, messages, qa_meta)
+                VALUES (:uid, :name, :msgs, :qam)
+            """),
+            {
+                "uid": user.id,
+                "name": row["name"],
+                "msgs": json.dumps(row["messages"]),
+                "qam": json.dumps(row["qa_meta"]),
+            },
+        )
+
+    # Clone pre_match analysis_reports
+    reports = await db.execute(
+        text("""
+            SELECT match_id, report_type, home_team_id, away_team_id, report_markdown
+            FROM analysis_reports
+            WHERE user_id = :uid AND report_type = 'pre_match'
+        """),
+        {"uid": template_uid},
+    )
+    for row in reports.mappings().all():
+        await db.execute(
+            text("""
+                INSERT INTO analysis_reports (match_id, report_type, home_team_id, away_team_id, report_markdown, user_id)
+                VALUES (:mid, :rtype, :htid, :atid, :rmd, :uid)
+            """),
+            {
+                "mid": row["match_id"],
+                "rtype": row["report_type"],
+                "htid": row["home_team_id"],
+                "atid": row["away_team_id"],
+                "rmd": row["report_markdown"],
+                "uid": user.id,
+            },
+        )
+
+    await db.commit()

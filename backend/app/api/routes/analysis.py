@@ -18,10 +18,15 @@ from app.agents.subgraphs.qa import (
     stream_direct_answer,
     stream_boundary_answer,
 )
-from app.core.security import get_current_user
+import logging
+
+from app.core.config import settings
+from app.core.security import get_current_user, require_role
 from app.db.models import User
 from app.db.postgres import get_db
 from app.db.redis_client import get_redis
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["analysis"])
 
@@ -48,11 +53,18 @@ class RenameSessionRequest(BaseModel):
     name: str
 
 
+async def _template_user_id(db: AsyncSession) -> int | None:
+    from sqlalchemy import select as _select
+    result = await db.execute(_select(User).where(User.email == settings.GUEST_TEMPLATE_EMAIL))
+    u = result.scalar_one_or_none()
+    return u.id if u else None
+
+
 @router.post("/pre-match")
 async def trigger_pre_match(
     body: PreMatchRequest,
     background_tasks: BackgroundTasks,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("full")),
 ):
     task_id = str(uuid.uuid4())
     redis = await get_redis()
@@ -76,6 +88,11 @@ async def list_pre_match_reports(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
+    effective_uid = user.id
+    if user.role == "guest":
+        effective_uid = await _template_user_id(session)
+        if effective_uid is None:
+            return []
     result = await session.execute(
         text("""
             SELECT ar.id, ar.home_team_id, ar.away_team_id, ar.report_markdown,
@@ -87,7 +104,7 @@ async def list_pre_match_reports(
             ORDER BY ar.created_at DESC
             LIMIT 5
         """),
-        {"uid": user.id},
+        {"uid": effective_uid},
     )
     rows = result.mappings().all()
     return [
@@ -213,7 +230,7 @@ async def _check_session_limit(db: AsyncSession, user_id: int, limit: int = 10) 
 @router.post("/chat")
 async def chat(
     body: ChatRequest,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("trial", "full")),
     db: AsyncSession = Depends(get_db),
 ):
     """Streaming chat endpoint — uses qa_graph for routing + stream_answer for SSE."""
@@ -361,7 +378,7 @@ async def chat(
 @router.post("/chat/sessions")
 async def create_chat_session(
     body: CreateSessionRequest,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("trial", "full")),
     db: AsyncSession = Depends(get_db),
 ):
     await _check_session_limit(db, user.id)
@@ -391,9 +408,14 @@ async def get_chat_session(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    effective_uid = user.id
+    if user.role == "guest":
+        effective_uid = await _template_user_id(db)
+        if effective_uid is None:
+            raise HTTPException(status_code=404, detail="Session not found")
     result = await db.execute(
         text("SELECT id, name, messages, qa_meta, updated_at FROM chat_sessions WHERE id = :sid AND user_id = :uid"),
-        {"sid": session_id, "uid": user.id},
+        {"sid": session_id, "uid": effective_uid},
     )
     row = result.mappings().first()
     if not row:
@@ -412,6 +434,11 @@ async def list_chat_sessions(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    effective_uid = user.id
+    if user.role == "guest":
+        effective_uid = await _template_user_id(db)
+        if effective_uid is None:
+            return []
     result = await db.execute(
         text("""
             SELECT id, name, messages, updated_at
@@ -420,7 +447,7 @@ async def list_chat_sessions(
             ORDER BY updated_at DESC
             LIMIT 10
         """),
-        {"uid": user.id},
+        {"uid": effective_uid},
     )
     rows = result.mappings().all()
     sessions = []
@@ -444,7 +471,7 @@ async def list_chat_sessions(
 async def rename_chat_session(
     session_id: int,
     body: RenameSessionRequest,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("trial", "full")),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -464,7 +491,7 @@ async def rename_chat_session(
 @router.post("/chat/sessions/{session_id}/cancel")
 async def cancel_chat_session(
     session_id: int,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("trial", "full")),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -488,7 +515,7 @@ async def cancel_chat_session(
 @router.delete("/chat/sessions/{session_id}")
 async def delete_chat_session(
     session_id: int,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("trial", "full")),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(

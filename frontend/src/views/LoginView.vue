@@ -56,6 +56,24 @@
 
         <!-- Links -->
         <div class="mt-6 text-center space-y-3">
+          <div class="flex gap-3">
+            <button
+              type="button"
+              @click="handleGuestLogin"
+              :disabled="loading"
+              class="flex-1 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              访客登录
+            </button>
+            <button
+              type="button"
+              @click="showQrModal = true"
+              :disabled="loading"
+              class="flex-1 py-2 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              获取体验账号
+            </button>
+          </div>
           <RouterLink
             to="/forgot-password"
             class="text-sm text-green-500 hover:text-green-400 transition-colors"
@@ -72,6 +90,29 @@
       </div>
     </div>
   </div>
+
+  <!-- QR Modal -->
+  <Teleport to="body">
+    <Transition name="fade">
+      <div
+        v-if="showQrModal"
+        class="fixed inset-0 z-[100] flex items-center justify-center"
+      >
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" @click="showQrModal = false"></div>
+        <div class="relative z-10 max-w-sm w-full mx-4 text-center">
+          <button
+            @click="showQrModal = false"
+            class="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-gray-700 border border-gray-600 text-white flex items-center justify-center hover:bg-gray-600 transition-colors z-20"
+            title="Close"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+          <img :src="qqImg" class="w-full rounded-xl shadow-2xl border border-gray-700" alt="QQ QR Code" />
+          <p class="text-gray-300 text-sm mt-3">扫码联系获取体验账号</p>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -80,6 +121,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/api'
 import { useAuthStore } from '@/stores/auth'
+import qqImg from '@/assets/images/qq.jpg'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -89,6 +131,7 @@ const email = ref('')
 const password = ref('')
 const loading = ref(false)
 const error = ref('')
+const showQrModal = ref(false)
 
 async function handleLogin() {
   loading.value = true
@@ -104,4 +147,30 @@ async function handleLogin() {
     loading.value = false
   }
 }
+
+async function handleGuestLogin() {
+  loading.value = true
+  error.value = ''
+  try {
+    const res = await api.guestLogin()
+    authStore.setUser(res.user)
+    authStore.setTokens(res.access_token, res.refresh_token)
+    router.push('/matches')
+  } catch (e: any) {
+    error.value = e.message || '访客登录失败'
+  } finally {
+    loading.value = false
+  }
+}
 </script>
+
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+</style>

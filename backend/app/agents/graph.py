@@ -4,7 +4,9 @@ from __future__ import annotations
 import os
 import uuid
 from typing import Literal
-from venv import logger
+import logging
+
+logger = logging.getLogger(__name__)
 
 try:
     from langsmith import traceable as _ls_traceable

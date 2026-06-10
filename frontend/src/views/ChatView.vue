@@ -91,32 +91,41 @@
 
     <!-- Input -->
     <div class="bg-gray-900 border-t border-gray-800 px-6 py-4 shrink-0">
-      <div class="flex gap-3 max-w-4xl mx-auto">
-        <input
-          v-model="inputText"
-          @keydown.enter.prevent="sendMessage()"
-          :disabled="isStreaming"
-          :placeholder="t('chat.inputPlaceholder')"
-          class="flex-1 bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-xl px-4 py-3 focus:ring-1 focus:ring-green-500 focus:outline-none disabled:opacity-50"
-        />
-        <button
-          v-if="!isStreaming"
-          @click="sendMessage()"
-          :disabled="!inputText.trim()"
-          class="px-5 py-3 bg-green-700 hover:bg-green-600 disabled:opacity-40 text-white rounded-xl transition-colors font-medium"
+      <div class="max-w-4xl mx-auto">
+        <div
+          v-if="authStore.isGuest"
+          class="mb-3 px-4 py-2 bg-amber-900/20 border border-amber-700/30 rounded-lg text-xs text-amber-400 text-center"
         >
-          {{ t('chat.sendBtn') }}
-        </button>
-        <button
-          v-else
-          @click="abortStream"
-          class="px-5 py-3 bg-red-700 hover:bg-red-600 text-white rounded-xl transition-colors font-medium"
-        >
-          {{ t('chat.stop') }}
-        </button>
+          您当前是访客客户，无法发送消息
+        </div>
+        <div class="flex gap-3">
+          <input
+            v-model="inputText"
+            @keydown.enter.prevent="sendMessage()"
+            :disabled="isStreaming || authStore.isGuest"
+            :placeholder="authStore.isGuest ? '访客客户无法发送消息' : t('chat.inputPlaceholder')"
+            class="flex-1 bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-xl px-4 py-3 focus:ring-1 focus:ring-green-500 focus:outline-none disabled:opacity-50"
+          />
+          <button
+            v-if="!isStreaming"
+            @click="sendMessage()"
+            :disabled="!inputText.trim() || authStore.isGuest"
+            class="px-5 py-3 bg-green-700 hover:bg-green-600 disabled:opacity-40 text-white rounded-xl transition-colors font-medium"
+          >
+            {{ t('chat.sendBtn') }}
+          </button>
+          <button
+            v-else
+            @click="abortStream"
+            class="px-5 py-3 bg-red-700 hover:bg-red-600 text-white rounded-xl transition-colors font-medium"
+          >
+            {{ t('chat.stop') }}
+          </button>
+        </div>
       </div>
     </div>
     <AuthModal v-model:visible="showAuthModal" />
+    <ToastNotification ref="toastRef" />
   </div>
 </template>
 
@@ -130,6 +139,7 @@ import { useSseStream } from '@/composables/useSseStream'
 import { useMarkdown } from '@/composables/useMarkdown'
 import { api, type ChatMessage, type QaMeta } from '@/api'
 import AuthModal from '@/components/AuthModal.vue'
+import ToastNotification from '@/components/ToastNotification.vue'
 
 const { t, tm } = useI18n()
 const authStore = useAuthStore()
@@ -233,9 +243,20 @@ async function startNewChat() {
   router.push('/chat')
 }
 
+const toastRef = ref<InstanceType<typeof ToastNotification> | null>(null)
+const GUEST_MSG = '您当前是访客客户，不允许进行该操作'
+
+function showToast(message: string, type: 'success' | 'error' | 'info' = 'info') {
+  toastRef.value?.show(message, type)
+}
+
 async function sendMessage(text?: string) {
   if (!authStore.isLoggedIn) {
     showAuthModal.value = true
+    return
+  }
+  if (authStore.isGuest) {
+    showToast(GUEST_MSG, 'error')
     return
   }
   const query = (text ?? inputText.value).trim()

@@ -290,6 +290,8 @@
       </div>
     </Transition>
   </Teleport>
+
+  <ToastNotification ref="toastRef" />
 </template>
 
 <script setup lang="ts">
@@ -301,6 +303,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 import { api } from '@/api'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import ToastNotification from '@/components/ToastNotification.vue'
 import qqImg from '@/assets/images/qq.jpg'
 import weixinImg from '@/assets/images/weixin.jpg'
 
@@ -342,6 +345,13 @@ const showLimitDialog = ref(false)
 const SESSION_LIMIT = 10
 const showImageModal = ref(false)
 const modalImageSrc = ref('')
+const toastRef = ref<InstanceType<typeof ToastNotification> | null>(null)
+
+function showToast(message: string, type: 'success' | 'error' | 'info' = 'info') {
+  toastRef.value?.show(message, type)
+}
+
+const GUEST_MSG = '您当前是访客客户，不允许进行该操作'
 
 function openImageModal(type: 'qq' | 'weixin') {
   modalImageSrc.value = type === 'qq' ? qqImg : weixinImg
@@ -349,28 +359,59 @@ function openImageModal(type: 'qq' | 'weixin') {
 }
 
 function startRename(s: { id: number; name: string }) {
+  if (authStore.isGuest) {
+    showToast(GUEST_MSG, 'error')
+    return
+  }
   editingSessionId.value = s.id
   editingName.value = s.name
 }
 
 async function confirmRename(id: number) {
-  await chatStore.renameSession(id, editingName.value)
-  editingSessionId.value = null
+  if (authStore.isGuest) {
+    showToast(GUEST_MSG, 'error')
+    editingSessionId.value = null
+    return
+  }
+  try {
+    await chatStore.renameSession(id, editingName.value)
+    editingSessionId.value = null
+  } catch (e: any) {
+    showToast(e.message || '操作失败', 'error')
+    editingSessionId.value = null
+  }
 }
 
 function startDelete(id: number) {
+  if (authStore.isGuest) {
+    showToast(GUEST_MSG, 'error')
+    return
+  }
   pendingDeleteId.value = id
   showDeleteDialog.value = true
 }
 
 async function doDelete() {
   if (pendingDeleteId.value !== null) {
-    await chatStore.deleteSession(pendingDeleteId.value)
+    if (authStore.isGuest) {
+      showToast(GUEST_MSG, 'error')
+      pendingDeleteId.value = null
+      return
+    }
+    try {
+      await chatStore.deleteSession(pendingDeleteId.value)
+    } catch (e: any) {
+      showToast(e.message || '操作失败', 'error')
+    }
     pendingDeleteId.value = null
   }
 }
 
 function newChat() {
+  if (authStore.isGuest) {
+    showToast(GUEST_MSG, 'error')
+    return
+  }
   if (chatStore.sessions.length >= SESSION_LIMIT) {
     showLimitDialog.value = true
     return

@@ -1,7 +1,19 @@
 const BASE_URL = ''
 
+const TRIAL_EXPIRED_MSG = 'Trial account has expired'
+
+function _clearAuthAndRedirect() {
+  sessionStorage.removeItem('access_token')
+  sessionStorage.removeItem('refresh_token')
+  sessionStorage.removeItem('user')
+  localStorage.removeItem('access_token')
+  localStorage.removeItem('refresh_token')
+  localStorage.removeItem('user')
+  window.location.href = '/login'
+}
+
 function getAuthHeader(): Record<string, string> {
-  const token = localStorage.getItem('access_token')
+  const token = sessionStorage.getItem('access_token') || localStorage.getItem('access_token')
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
@@ -14,7 +26,7 @@ async function doRefresh(): Promise<string | null> {
   }
   isRefreshing = true
   refreshPromise = (async () => {
-    const rt = localStorage.getItem('refresh_token')
+    const rt = sessionStorage.getItem('refresh_token') || localStorage.getItem('refresh_token')
     if (!rt) return null
     try {
       const res = await fetch(`${BASE_URL}/api/auth/refresh`, {
@@ -22,14 +34,23 @@ async function doRefresh(): Promise<string | null> {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refresh_token: rt }),
       })
+      if (res.status === 403) {
+        const err = await res.json().catch(() => ({ detail: '' }))
+        if (err.detail?.includes(TRIAL_EXPIRED_MSG)) {
+          _clearAuthAndRedirect()
+          return null
+        }
+      }
       if (!res.ok) return null
       const data = await res.json()
-      localStorage.setItem('access_token', data.access_token)
+      const temp = data.user?.role === 'guest'
+      const store = temp ? sessionStorage : localStorage
+      store.setItem('access_token', data.access_token)
       if (data.refresh_token) {
-        localStorage.setItem('refresh_token', data.refresh_token)
+        store.setItem('refresh_token', data.refresh_token)
       }
       if (data.user) {
-        localStorage.setItem('user', JSON.stringify(data.user))
+        store.setItem('user', JSON.stringify(data.user))
       }
       return data.access_token as string
     } catch {
@@ -58,14 +79,17 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
   // Try refresh on 401 if we have a refresh token
   if (res.status === 401) {
-    const rtBefore = localStorage.getItem('refresh_token')
+    const rtBefore = sessionStorage.getItem('refresh_token') || localStorage.getItem('refresh_token')
     const newToken = await doRefresh()
     if (newToken) {
       res = await makeRequest(newToken)
     } else {
       // Refresh failed — clear auth state only if no other tab updated the token
-      const rtAfter = localStorage.getItem('refresh_token')
+      const rtAfter = sessionStorage.getItem('refresh_token') || localStorage.getItem('refresh_token')
       if (rtAfter === rtBefore) {
+        sessionStorage.removeItem('access_token')
+        sessionStorage.removeItem('refresh_token')
+        sessionStorage.removeItem('user')
         localStorage.removeItem('access_token')
         localStorage.removeItem('refresh_token')
         localStorage.removeItem('user')
@@ -75,6 +99,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
+    if (res.status === 403 && err.detail?.includes(TRIAL_EXPIRED_MSG)) {
+      _clearAuthAndRedirect()
+      throw new Error(err.detail)
+    }
     throw new Error(err.detail ?? `HTTP ${res.status}`)
   }
   return res.json() as Promise<T>
@@ -214,12 +242,24 @@ export const api = {
     }),
 
   me: () => request<User>('/api/auth/me'),
+
+  guestLogin: () =>
+    request<{ access_token: string; refresh_token: string; user: User }>('/api/auth/guest-login', {
+      method: 'POST',
+    }),
+
+  createTrial: (body: { admin_secret: string }) =>
+    request<{ email: string; password: string }>('/api/auth/create-trial', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 }
 
 export interface User {
   id: number
   email: string
   nickname: string
+  role: string
 }
 
 export interface Competition {

@@ -31,13 +31,14 @@ def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
 
 
-def create_access_token(user_id: int, email: str, nickname: str) -> str:
+def create_access_token(user_id: int, email: str, nickname: str, role: str = "full") -> str:
     """Create a short-lived access token (15 minutes)."""
     now = datetime.now(timezone.utc)
     payload = {
         "sub": str(user_id),
         "email": email,
         "nickname": nickname,
+        "role": role,
         "iat": now,
         "exp": now + timedelta(minutes=15),
         "type": "access",
@@ -141,6 +142,12 @@ async def get_current_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Email not verified",
         )
+    if user.role == "trial" and user.trial_expires_at:
+        if datetime.utcnow() > user.trial_expires_at:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Trial account has expired",
+            )
     return user
 
 
@@ -159,4 +166,52 @@ async def get_current_user_optional(
     user = result.scalar_one_or_none()
     if user is None or not user.is_verified:
         return None
+    if user.role == "trial" and user.trial_expires_at:
+        if datetime.utcnow() > user.trial_expires_at:
+            return None
     return user
+
+
+def require_role(*allowed_roles: str):
+    """Dependency factory that checks the current user's role."""
+    async def _checker(
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+        session: AsyncSession = Depends(get_db),
+    ) -> User:
+        if credentials is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Missing authentication token",
+            )
+        payload = decode_access_token(credentials.credentials)
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token",
+            )
+        user_id = int(payload["sub"])
+        result = await session.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found",
+            )
+        if not user.is_verified:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Email not verified",
+            )
+        if user.role == "trial" and user.trial_expires_at:
+            if datetime.utcnow() > user.trial_expires_at:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Trial account has expired",
+                )
+        if user.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Permission denied",
+            )
+        return user
+    return _checker

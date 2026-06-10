@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     # Auth
     JWT_SECRET: str = "change-me-in-production"
     JWT_REFRESH_SECRET: str = "change-me-too-in-production"
+    GUEST_TEMPLATE_EMAIL: str = "2201044408@qq.com"
+    TRIAL_ADMIN_SECRET: str = ""
 
     # Email (SMTP)
     SMTP_HOST: str = "smtp.163.com"

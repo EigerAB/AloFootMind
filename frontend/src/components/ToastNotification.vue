@@ -1,15 +1,15 @@
 <template>
   <Teleport to="body">
-    <div class="fixed bottom-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
+    <div class="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-2 pointer-events-none">
       <TransitionGroup name="toast">
         <div
           v-for="toast in toasts"
           :key="toast.id"
-          class="pointer-events-auto px-4 py-3 rounded-xl shadow-2xl text-sm max-w-sm flex items-center gap-3"
+          class="pointer-events-auto px-5 py-3 rounded-xl shadow-2xl text-sm max-w-md flex items-center gap-3 backdrop-blur-sm"
           :class="toastClass(toast.type)"
         >
-          <span>{{ toastIcon(toast.type) }}</span>
-          <span>{{ toast.message }}</span>
+          <span class="shrink-0 text-base">{{ toastIcon(toast.type) }}</span>
+          <span class="leading-relaxed">{{ toast.message }}</span>
         </div>
       </TransitionGroup>
     </div>

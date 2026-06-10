@@ -9,6 +9,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.graph import run_analysis
+from app.core.security import require_role
+from app.db.models import User
 from app.db.postgres import get_db
 from app.db.redis_client import get_redis
 
@@ -142,6 +144,7 @@ async def trigger_analysis(
     match_id: int,
     body: AnalyzeRequest,
     background_tasks: BackgroundTasks,
+    user: User = Depends(require_role("full")),
     session: AsyncSession = Depends(get_db),
 ):
     row = await session.execute(
@@ -164,7 +167,7 @@ async def trigger_analysis(
 
     background_tasks.add_task(
         run_analysis,
-        {"task_id": task_id, "request_type": "post_match", "match_id": match_id, "language": body.language},
+        {"task_id": task_id, "request_type": "post_match", "match_id": match_id, "language": body.language, "user_id": user.id},
     )
     return {"match_id": match_id, "task_id": task_id, "status": "pending"}
 

@@ -186,6 +186,7 @@
     </Teleport>
 
     <AuthModal v-model:visible="showAuthModal" />
+    <ToastNotification ref="toastRef" />
 
     <ConfirmDialog
       v-model:visible="showConfirmDialog"
@@ -205,12 +206,14 @@ import { useSseStream } from '@/composables/useSseStream'
 import AgentViewer from '@/components/AgentViewer.vue'
 import ReportViewer from '@/components/ReportViewer.vue'
 import AuthModal from '@/components/AuthModal.vue'
+import ToastNotification from '@/components/ToastNotification.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
 const showAuthModal = ref(false)
+const toastRef = ref<InstanceType<typeof ToastNotification> | null>(null)
 
 const hierarchy = ref<CompetitionWithTeams[]>([])
 
@@ -320,9 +323,19 @@ function onTeamSelect(_side: 'home' | 'away') {
   // v-model handles the value; this hook can be used for side-effects if needed
 }
 
+const GUEST_TRIAL_MSG = '您当前是访客/体验客户，无法进行该操作'
+
+function showToast(message: string, type: 'success' | 'error' | 'info' = 'info') {
+  toastRef.value?.show(message, type)
+}
+
 async function generateReport() {
   if (!authStore.isLoggedIn) {
     showAuthModal.value = true
+    return
+  }
+  if (authStore.isGuest || authStore.isTrial) {
+    showToast(GUEST_TRIAL_MSG, 'error')
     return
   }
   if (!homeTeam.value || !awayTeam.value) return
