@@ -198,19 +198,6 @@
             >
               <i class="iconfont icon-shuomingshu" style="font-size: 20px;"></i>
             </a>
-            <Transition name="fade">
-              <div
-                v-if="showShuomingshuTooltip"
-                class="tooltip-box tooltip-float"
-              >
-                <button
-                  @click="closeShuomingshuTooltip"
-                  class="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-gray-600 text-white text-[10px] flex items-center justify-center hover:bg-gray-500 leading-none"
-                >×</button>
-                <span>点击预览项目设计报告</span>
-                <div class="tooltip-arrow"></div>
-              </div>
-            </Transition>
           </div>
           <a
             href="https://github.com/EigerAB/AloFootMind"
@@ -441,9 +428,6 @@ function switchLocale(lang: LocaleKey) {
 onMounted(() => {
   if (authStore.isLoggedIn) {
     chatStore.loadSessions()
-  }
-  if (localStorage.getItem('tooltip-shuomingshu-closed') === 'true') {
-    showShuomingshuTooltip.value = false
   }
 })
 </script>
