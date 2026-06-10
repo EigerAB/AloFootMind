@@ -85,7 +85,7 @@
                 class="text-xs bg-gray-800/60 rounded px-2.5 py-1.5"
               >
                 <div class="flex items-center gap-2 mb-1">
-                  <span class="text-gray-500">[{{ i + 1 }}]</span>
+                  <span class="text-gray-500">[{{ (i as number) + 1 }}]</span>
                   <span class="text-gray-600">{{ seg.collection }}</span>
                   <span class="ml-auto text-gray-600">{{ seg.score }}</span>
                 </div>

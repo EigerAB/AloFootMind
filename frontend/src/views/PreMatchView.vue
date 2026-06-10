@@ -195,7 +195,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api, type Team, type CompetitionWithTeams, type PreMatchReport } from '@/api'
 import { useAuthStore } from '@/stores/auth'

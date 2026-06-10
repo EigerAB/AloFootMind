@@ -63,7 +63,7 @@
                 class="absolute right-1 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center gap-0.5 bg-gray-800 rounded px-1"
               >
                 <button
-                  v-if="editingSessionId !== s.id && deletingSessionId !== s.id"
+                  v-if="editingSessionId !== s.id && !showDeleteDialog"
                   @click.stop="startRename(s)"
                   class="p-0.5 text-gray-500 hover:text-green-400"
                   title="Rename"
@@ -71,7 +71,7 @@
                   ✏️
                 </button>
                 <button
-                  v-if="editingSessionId !== s.id && deletingSessionId !== s.id"
+                  v-if="editingSessionId !== s.id && !showDeleteDialog"
                   @click.stop="startDelete(s.id)"
                   class="p-0.5 text-gray-500 hover:text-red-400"
                   title="Delete"
