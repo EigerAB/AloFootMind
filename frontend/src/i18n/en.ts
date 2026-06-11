@@ -124,7 +124,7 @@ export default {
     sendBtn: 'Send',
     newChat: 'New Chat',
     stop: 'Stop',
-    userCancelled: 'You cancelled this response',
+    userCancelled: 'User interrupted the answer',
     sessionLimitTitle: 'Chat Limit Reached',
     sessionLimitMsg: 'You can save up to 10 chats. Please delete at least one before creating a new chat.',
     sessionLimitOk: 'Got it',

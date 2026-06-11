@@ -187,8 +187,11 @@ export const api = {
       body: JSON.stringify({ name }),
     }),
 
-  cancelChatSession: (id: number) =>
-    request<{ ok: boolean }>(`/api/chat/sessions/${id}/cancel`, { method: 'POST' }),
+  cancelChatSession: (id: number, messages?: any[]) =>
+    request<{ ok: boolean }>(`/api/chat/sessions/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ messages: messages ?? null }),
+    }),
 
   deleteChatSession: (id: number) =>
     request<{ message: string }>(`/api/chat/sessions/${id}`, { method: 'DELETE' }),

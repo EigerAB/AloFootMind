@@ -56,7 +56,7 @@
           <div class="flex-1 min-w-0">
             <div
               class="bg-gray-900 border border-gray-800 rounded-2xl rounded-tl-sm px-4 py-3 text-sm prose-report max-w-3xl"
-              v-html="renderMarkdown(msg.content)"
+              v-html="renderMarkdown(msg.content === '__INTERRUPTED__' ? t('chat.userCancelled') : msg.content)"
             />
             <div v-if="msg.sources?.length" class="mt-2 flex flex-wrap gap-1.5">
               <span
@@ -116,7 +116,7 @@
           </button>
           <button
             v-else
-            @click="abortStream"
+            @click="handleStop"
             class="px-5 py-3 bg-red-700 hover:bg-red-600 text-white rounded-xl transition-colors font-medium"
           >
             {{ t('chat.stop') }}
@@ -198,9 +198,9 @@ watch(
     // Abort only when navigating away from the session that is currently streaming
     if (isStreaming.value && newId !== oldId) {
       abortStream()
-      // Fire-and-forget: write cancel system message to DB so user sees it on return
+      // Fire-and-forget: persist the local messages (including __INTERRUPTED__) to the backend
       if (streamingSessionId.value) {
-        api.cancelChatSession(streamingSessionId.value).catch(() => {})
+        api.cancelChatSession(streamingSessionId.value, messages.value).catch(() => {})
       }
     }
     if (newId) {
@@ -231,15 +231,27 @@ function scrollToBottom() {
 watch([messages, streamBuffer, isStreaming], scrollToBottom)
 
 function abortStream() {
+  if (!isStreaming.value) return
   stopSse()
+  if (streamingSessionId.value) {
+    const last = messages.value[messages.value.length - 1]
+    if (!last || last.content !== '__INTERRUPTED__') {
+      messages.value.push({ role: 'assistant', content: '__INTERRUPTED__' })
+    }
+  }
   isStreaming.value = false
   streamBuffer.value = ''
 }
 
-async function startNewChat() {
-  if (isStreaming.value) {
-    abortStream()
+async function handleStop() {
+  const sid = streamingSessionId.value
+  abortStream()
+  if (sid) {
+    await api.cancelChatSession(sid, messages.value).catch(() => {})
   }
+}
+
+async function startNewChat() {
   router.push('/chat')
 }
 
@@ -268,7 +280,7 @@ async function sendMessage(text?: string) {
   // If new chat (no session yet), create session immediately so sidebar updates at once
   let currentSessionId = sessionId.value
   if (!currentSessionId) {
-    const newSession = await api.createChatSession(query.slice(0, 30), query)
+    const newSession = await api.createChatSession(query.slice(0, 30))
     currentSessionId = newSession.id
     chatStore.loadSessions()
   }

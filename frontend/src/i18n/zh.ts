@@ -124,7 +124,7 @@ export default {
     sendBtn: '发送',
     newChat: '新聊天',
     stop: '中断',
-    userCancelled: '用户取消了此次问答',
+    userCancelled: '用户中断了回答',
     sessionLimitTitle: '聊天记录已满',
     sessionLimitMsg: '最多只能保存 10 个聊天记录，请先删除至少一个才能创建新聊天。',
     sessionLimitOk: '知道了',

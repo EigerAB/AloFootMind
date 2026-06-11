@@ -53,6 +53,10 @@ class RenameSessionRequest(BaseModel):
     name: str
 
 
+class CancelSessionRequest(BaseModel):
+    messages: list[dict] | None = None
+
+
 async def _template_user_id(db: AsyncSession) -> int | None:
     from sqlalchemy import select as _select
     result = await db.execute(_select(User).where(User.email == settings.GUEST_TEMPLATE_EMAIL))
@@ -491,6 +495,7 @@ async def rename_chat_session(
 @router.post("/chat/sessions/{session_id}/cancel")
 async def cancel_chat_session(
     session_id: int,
+    body: CancelSessionRequest | None = None,
     user: User = Depends(require_role("trial", "full")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -502,13 +507,18 @@ async def cancel_chat_session(
     if not row:
         raise HTTPException(status_code=404, detail="Session not found")
     msgs = list(row["messages"] or [])
-    if msgs and msgs[-1].get("role") == "user":
-        msgs.append({"role": "system", "content": "cancelled"})
-        await db.execute(
-            text("UPDATE chat_sessions SET messages = :msgs, updated_at = NOW() WHERE id = :sid AND user_id = :uid"),
-            {"msgs": json.dumps(msgs, ensure_ascii=False), "sid": session_id, "uid": user.id},
-        )
-        await db.commit()
+
+    # If frontend sends the latest messages (including the interrupted marker), use them directly
+    if body and body.messages:
+        msgs = body.messages
+    elif msgs and msgs[-1].get("role") == "user":
+        msgs.append({"role": "assistant", "content": "__INTERRUPTED__"})
+
+    await db.execute(
+        text("UPDATE chat_sessions SET messages = :msgs, updated_at = NOW() WHERE id = :sid AND user_id = :uid"),
+        {"msgs": json.dumps(msgs, ensure_ascii=False), "sid": session_id, "uid": user.id},
+    )
+    await db.commit()
     return {"ok": True}
 
 
