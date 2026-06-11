@@ -247,12 +247,6 @@ export const api = {
     request<{ access_token: string; refresh_token: string; user: User }>('/api/auth/guest-login', {
       method: 'POST',
     }),
-
-  createTrial: (body: { admin_secret: string }) =>
-    request<{ email: string; password: string }>('/api/auth/create-trial', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
 }
 
 export interface User {
