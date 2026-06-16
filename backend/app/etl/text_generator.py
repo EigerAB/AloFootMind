@@ -279,3 +279,173 @@ def aggregate_player_season_stats(
         "fouls_drawn": fouls_drawn,
         "positions": ", ".join(sorted(positions)) if positions else "Unknown",
     }
+
+
+# ─────────────────────────────────────────────
+# Layer 4 — Team season tactical profile
+# ─────────────────────────────────────────────
+
+def aggregate_team_tactical_stats(
+    team_id: int,
+    matches_events: list[tuple[int, list[dict]]],
+) -> dict:
+    """Aggregate possession-level tactical stats for a team across a season."""
+    from collections import defaultdict
+
+    zone_counts: dict[str, int] = defaultdict(int)
+    zone_passes: dict[str, list[int]] = defaultdict(list)
+    zone_pressure_passes: dict[str, list[int]] = defaultdict(list)
+    counters = {"total": 0, "shots": 0, "carries": 0, "passes_prog": 0, "long": 0}
+
+    _ZONE_RANGES = [((0, 40), "后场"), ((40, 80), "中场"), ((80, 120), "前场")]
+
+    def _zone(location):
+        if not location or len(location) < 1:
+            return None
+        x = location[0]
+        for (x0, x1), label in _ZONE_RANGES:
+            if x0 <= x < x1:
+                return label
+        return "前场"
+
+    for _match_id, events in matches_events:
+        current_seq: list[dict] = []
+        current_team_id: int | None = None
+
+        for ev in events:
+            ev_team_id = (ev.get("team") or {}).get("id")
+            if ev_team_id != current_team_id:
+                if current_team_id == team_id and current_seq:
+                    _process_seq(current_seq, zone_counts, zone_passes,
+                                 zone_pressure_passes, counters, _zone)
+                current_seq = [ev]
+                current_team_id = ev_team_id
+            else:
+                current_seq.append(ev)
+        if current_team_id == team_id and current_seq:
+            _process_seq(current_seq, zone_counts, zone_passes,
+                         zone_pressure_passes, counters, _zone)
+
+    total = counters["total"]
+    zone_avg_passes = {
+        z: (sum(v) / len(v)) if v else 0.0
+        for z, v in zone_passes.items()
+    }
+    zone_pressure_ratio = {
+        z: (sum(zone_pressure_passes.get(z, [])) / sum(zone_passes[z]) * 100)
+        if sum(zone_passes[z]) > 0 else 0.0
+        for z in zone_passes
+    }
+
+    shot_rate = (counters["shots"] / total * 100) if total > 0 else 0.0
+    long_poss_rate = (counters["long"] / total * 100) if total > 0 else 0.0
+    total_prog = counters["carries"] + counters["passes_prog"]
+    carry_ratio = (counters["carries"] / total_prog * 100) if total_prog > 0 else 0.0
+    pass_ratio = (counters["passes_prog"] / total_prog * 100) if total_prog > 0 else 0.0
+
+    return {
+        "total_possessions": total,
+        "zone_counts": dict(zone_counts),
+        "zone_avg_passes": zone_avg_passes,
+        "zone_pressure_ratio": zone_pressure_ratio,
+        "shot_rate": shot_rate,
+        "long_possession_rate": long_poss_rate,
+        "carry_progression_ratio": carry_ratio,
+        "pass_progression_ratio": pass_ratio,
+    }
+
+
+def _process_seq(seq, zone_counts, zone_passes, zone_pressure_passes, counters, _zone_fn):
+    """Extract stats from one possession sequence; mutates all container args."""
+    if not seq:
+        return
+
+    counters["total"] += 1
+    event_types = [(ev.get("type") or {}).get("name", "") for ev in seq]
+    first_loc = next((ev.get("location") for ev in seq if ev.get("location")), None)
+    start_zone = _zone_fn(first_loc)
+    last_loc = next((ev.get("location") for ev in reversed(seq) if ev.get("location")), None)
+    end_zone = _zone_fn(last_loc)
+
+    if start_zone:
+        zone_counts[start_zone] += 1
+
+    pass_count = sum(1 for t in event_types if t in ("Pass", "传球"))
+    pressure_count = sum(1 for ev in seq if ev.get("under_pressure"))
+
+    if start_zone:
+        zone_passes[start_zone].append(pass_count)
+        zone_pressure_passes[start_zone].append(pressure_count)
+
+    if any(t in event_types for t in ("Shot", "射门")):
+        counters["shots"] += 1
+
+    if pass_count >= 10:
+        counters["long"] += 1
+
+    has_carry = any(t in event_types for t in ("Carry", "带球"))
+    has_dribble = any(t in event_types for t in ("Dribble", "盘带"))
+    if start_zone and end_zone and start_zone != end_zone:
+        if has_carry or has_dribble:
+            counters["carries"] += 1
+        else:
+            counters["passes_prog"] += 1
+
+
+async def generate_team_tactical_profile(
+    team_name: str,
+    team_id: int,
+    competition_name: str,
+    season_name: str,
+    stats: dict,
+) -> str:
+    """Call DeepSeek to generate a Chinese team tactical profile from aggregated stats."""
+    total = stats.get("total_possessions", 0)
+    zone_counts = stats.get("zone_counts", {})
+    zone_avg = stats.get("zone_avg_passes", {})
+    zone_pressure = stats.get("zone_pressure_ratio", {})
+    shot_rate = stats.get("shot_rate", 0.0)
+    long_rate = stats.get("long_possession_rate", 0.0)
+    carry_ratio = stats.get("carry_progression_ratio", 0.0)
+    pass_ratio = stats.get("pass_progression_ratio", 0.0)
+
+    def fmt_zone(z):
+        cnt = zone_counts.get(z, 0)
+        pct = (cnt / total * 100) if total > 0 else 0.0
+        avg_p = zone_avg.get(z, 0.0)
+        pressure_r = zone_pressure.get(z, 0.0)
+        return f"{z}（{pct:.1f}%持球，平均{avg_p:.1f}次传球，承压传球率{pressure_r:.1f}%）"
+
+    zone_lines = "\n".join(fmt_zone(z) for z in ["后场", "中场", "前场"] if z in zone_counts)
+
+    prompt = f"""你是一位专业的足球战术分析师。请根据以下赛季统计数据，用中文撰写一篇关于{team_name}的战术风格分析摘要（400-600字）。
+
+球队：{team_name}
+赛季：{competition_name} {season_name}
+总持球次数：{total}
+
+各区域持球分布：
+{zone_lines}
+
+其他统计：
+- 持球转化射门率：{shot_rate:.1f}%
+- 长时间控球（≥10次传球）占比：{long_rate:.1f}%
+- 进攻推进方式：带球推进占{carry_ratio:.1f}%，传球推进占{pass_ratio:.1f}%
+
+请分析：
+1. 该队的控球区域偏好（重心在哪个区域，为什么）
+2. 传球风格（短传渗透还是长传直塞，传球节奏）
+3. 承压能力（在压力下的传球表现）
+4. 进攻套路（持球推进 vs 快速反击的偏向）
+5. 整体战术标签（如：控球型、反击型、高位逼抢、低位防守等）
+
+要求：用自然流畅的中文分析语言，不要列表，写成段落形式，包含具体数据引用。"""
+
+    client = get_deepseek_client()
+    response = await client.chat.completions.create(
+        model=settings.DEEPSEEK_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=900,
+        temperature=0.3,
+    )
+    return response.choices[0].message.content.strip()

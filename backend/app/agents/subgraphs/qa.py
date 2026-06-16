@@ -108,9 +108,9 @@ Known entities found in query:
 Task:
 1. Translate any Chinese football terms to English equivalents.
 2. Replace player/team nicknames with standard names from the entity list.
-3. Output a concise, standardized search query (1 short sentence).
+3. Output a concise, standardized search query (1 short sentence) in English.
 
-Output ONLY the rewritten query text, nothing else."""
+Output ONLY the rewritten English query text, nothing else."""
 
             llm = get_deepseek_llm(
                 temperature=0.1,
@@ -121,12 +121,19 @@ Output ONLY the rewritten query text, nothing else."""
             if resp.content:
                 rewritten = resp.content.strip().strip('"').strip("'")
 
+        # Build a bilingual search query: combine original Chinese + English rewrite
+        # so that Milvus sparse (BM25) can match Chinese tokens while dense covers English semantics
+        if rewritten != original_query and re.search(r"[\u4e00-\u9fff]", original_query):
+            bilingual_query = f"{original_query} {rewritten}"
+        else:
+            bilingual_query = rewritten
+
         step_log = await push_step(
             state, node, "completed",
             f"Rewritten: {rewritten[:80]}..." if len(rewritten) > 80 else f"Rewritten: {rewritten}"
         )
         existing = dict(state.get("analysis_result") or {})
-        existing["rewritten_query"] = rewritten
+        existing["rewritten_query"] = bilingual_query
         existing["extracted_entities"] = entities
 
         return {"step_log": step_log, "analysis_result": existing}
@@ -214,13 +221,20 @@ async def rag_retrieval(state: AnalysisState) -> dict:
 
         ar = state.get("analysis_result") or {}
         levels = ar.get("query_levels", ["tactical_level"])
-        # Use rewritten query if available
+        # Use rewritten (bilingual) query if available
         query = ar.get("rewritten_query") or state.get("query") or ""
+
+        # Extract team_id filter from matched entities (if exactly one team matched)
+        entities = ar.get("extracted_entities", [])
+        team_ids_in_query = [e["id"] for e in entities if e["type"] == "team"]
+        team_id_filter = team_ids_in_query[0] if len(team_ids_in_query) == 1 else None
 
         results = await retrieve(
             query=query,
-            top_k=5,
+            top_k=10,
+            team_id=team_id_filter,
             force_levels=levels,
+            score_threshold=None,
         )
 
         if not results:
@@ -228,7 +242,7 @@ async def rag_retrieval(state: AnalysisState) -> dict:
         else:
             step_log = await push_step(
                 state, node, "completed",
-                f"Retrieved {len(results)} relevant documents."
+                f"Retrieved {len(results)} relevant documents (team_id_filter={team_id_filter})."
             )
         return {"step_log": step_log, "rag_context": results}
 

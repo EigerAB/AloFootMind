@@ -56,6 +56,20 @@ COLLECTIONS = {
             FieldSchema("sparse_vector", DataType.SPARSE_FLOAT_VECTOR),
         ],
     },
+    "team_tactical_profiles": {
+        "description": "Layer 4 - Team season tactical profiles (aggregated)",
+        "fields": [
+            FieldSchema("id", DataType.INT64, is_primary=True, auto_id=True),
+            FieldSchema("team_id", DataType.INT64),
+            FieldSchema("competition_id", DataType.INT64),
+            FieldSchema("season_id", DataType.INT64),
+            FieldSchema("text", DataType.VARCHAR, max_length=4096),
+            FieldSchema(
+                "dense_vector", DataType.FLOAT_VECTOR, dim=BGE_M3_DIM
+            ),
+            FieldSchema("sparse_vector", DataType.SPARSE_FLOAT_VECTOR),
+        ],
+    },
 }
 
 INDEX_PARAMS = {

@@ -21,7 +21,7 @@ from app.db.postgres import AsyncSessionLocal, init_db
 from app.db.milvus_client import connect_milvus
 from app.db.milvus_init import init_milvus_collections
 from app.etl.parser import iter_all_matches, load_competitions
-from app.etl.pipeline import ingest_match, ingest_player_profiles
+from app.etl.pipeline import ingest_match, ingest_player_profiles, ingest_team_tactical_profiles
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,7 +30,7 @@ logging.basicConfig(
 logger = logging.getLogger("ingest")
 
 
-async def main(competition_id: int | None, season_id: int | None, dry_run: bool) -> None:
+async def main(competition_id: int | None, season_id: int | None, dry_run: bool, skip_team_profiles: bool = False) -> None:
     logger.info("Initialising database...")
     await init_db()
     logger.info("Ensuring Milvus collections exist...")
@@ -75,6 +75,18 @@ async def main(competition_id: int | None, season_id: int | None, dry_run: bool)
                         season_name=comp_entry_for_season["season_name"],
                         dry_run=dry_run,
                     )
+                    if not skip_team_profiles:
+                        logger.info(
+                            f"Generating team tactical profiles for competition={cid} season={sid}..."
+                        )
+                        await ingest_team_tactical_profiles(
+                            session=session,
+                            competition_id=cid,
+                            season_id=sid,
+                            competition_name=comp_entry_for_season["competition_name"],
+                            season_name=comp_entry_for_season["season_name"],
+                            dry_run=dry_run,
+                        )
 
     logger.info("ETL complete.")
 
@@ -98,6 +110,11 @@ if __name__ == "__main__":
         action="store_true",
         help="Parse only, do not write to any storage",
     )
+    parser.add_argument(
+        "--skip-team-profiles",
+        action="store_true",
+        help="Skip generating team tactical profiles (Layer 4)",
+    )
     args = parser.parse_args()
     logger.info(f"Args: {args}")
-    asyncio.run(main(args.competition_id, args.season_id, args.dry_run))
+    asyncio.run(main(args.competition_id, args.season_id, args.dry_run, args.skip_team_profiles))

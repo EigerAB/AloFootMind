@@ -176,16 +176,17 @@ def parse_events_aggregated(match_id: int, home_team_id: int, away_team_id: int,
 
         if ev_type in ("Shot", "射门"):
             outcome = (ev.get("shot") or {}).get("outcome", {}).get("name", "")
+            _on_target = ("Goal", "Saved", "Saved To Post", "进球", "扑救", "扑救到柱")
             if is_home:
                 home_shots += 1
-                if outcome in ("Goal", "Saved", "Saved To Post"):
+                if outcome in _on_target:
                     home_shots_on_target += 1
             else:
                 away_shots += 1
-                if outcome in ("Goal", "Saved", "Saved To Post"):
+                if outcome in _on_target:
                     away_shots_on_target += 1
 
-            if outcome == "Goal":
+            if outcome in ("Goal", "进球"):
                 key_events.append({
                     "type": "Goal",
                     "team_id": team_id,
@@ -210,12 +211,15 @@ def parse_events_aggregated(match_id: int, home_team_id: int, away_team_id: int,
 
         elif ev_type in ("Yellow Card", "Red Card", "Second Yellow", "Bad Behaviour", "不良行为", "黄牌", "红牌", "第二黄牌"):
             if ev_type in ("Bad Behaviour", "不良行为"):
-                card_name = (ev.get("bad_behaviour") or {}).get("card", {}).get("name", "")
-            elif ev_type == "黄牌":
+                raw = (ev.get("bad_behaviour") or {}).get("card", {}).get("name", "")
+                _card_map = {"Yellow Card": "Yellow Card", "Red Card": "Red Card", "Second Yellow": "Second Yellow",
+                             "黄牌": "Yellow Card", "红牌": "Red Card", "第二黄牌": "Second Yellow"}
+                card_name = _card_map.get(raw, raw)
+            elif ev_type in ("黄牌", "Yellow Card"):
                 card_name = "Yellow Card"
-            elif ev_type == "红牌":
+            elif ev_type in ("红牌", "Red Card"):
                 card_name = "Red Card"
-            elif ev_type == "第二黄牌":
+            elif ev_type in ("第二黄牌", "Second Yellow"):
                 card_name = "Second Yellow"
             else:
                 card_name = ev_type

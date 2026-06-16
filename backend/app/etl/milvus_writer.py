@@ -18,6 +18,15 @@ def _batch_insert(collection: Collection, rows: list[dict], field_names: list[st
     collection.flush()
 
 
+def _delete_by_expr(collection: Collection, expr: str) -> None:
+    """Delete existing docs matching expr before re-inserting (idempotency)."""
+    try:
+        collection.delete(expr)
+        collection.flush()
+    except Exception:
+        pass
+
+
 def write_match_summaries(
     entries: list[dict],
 ) -> None:
@@ -32,6 +41,9 @@ def write_match_summaries(
     vectors = embed_texts(texts)
 
     collection = Collection("match_summaries")
+    # Idempotency: delete existing docs for these match_ids first
+    ids = list({e["match_id"] for e in entries})
+    _delete_by_expr(collection, f"match_id in {ids}")
     rows = []
     for i, entry in enumerate(entries):
         rows.append({
@@ -67,6 +79,9 @@ def write_tactical_segments(
     vectors = embed_texts(texts)
 
     collection = Collection("tactical_segments")
+    # Idempotency: delete existing segments for these match_ids first
+    ids = list({e["match_id"] for e in entries})
+    _delete_by_expr(collection, f"match_id in {ids}")
     rows = []
     for i, entry in enumerate(entries):
         rows.append({
@@ -102,6 +117,12 @@ def write_player_profiles(
     vectors = embed_texts(texts)
 
     collection = Collection("player_profiles")
+    # Idempotency: delete existing profiles for these (player_id, season_id) first
+    for e in entries:
+        _delete_by_expr(
+            collection,
+            f"player_id == {e['player_id']} && season_id == {e['season_id']}",
+        )
     rows = []
     for i, entry in enumerate(entries):
         rows.append({
@@ -118,5 +139,44 @@ def write_player_profiles(
         collection,
         rows,
         ["player_id", "competition_id", "season_id", "team_id",
+         "text", "dense_vector", "sparse_vector"],
+    )
+
+
+def write_team_tactical_profiles(
+    entries: list[dict],
+) -> None:
+    """
+    entries: list of dicts with keys:
+      team_id, competition_id, season_id, text
+    """
+    if not entries:
+        return
+    _ensure_connected()
+    texts = [e["text"] for e in entries]
+    vectors = embed_texts(texts)
+
+    collection = Collection("team_tactical_profiles")
+    # Idempotency: delete existing profiles for these (team_id, season_id) first
+    for e in entries:
+        _delete_by_expr(
+            collection,
+            f"team_id == {e['team_id']} && season_id == {e['season_id']}",
+        )
+    rows = []
+    for i, entry in enumerate(entries):
+        rows.append({
+            "team_id": entry["team_id"],
+            "competition_id": entry["competition_id"],
+            "season_id": entry["season_id"],
+            "text": entry["text"][:4090],
+            "dense_vector": vectors[i]["dense_vector"],
+            "sparse_vector": vectors[i]["sparse_vector"],
+        })
+
+    _batch_insert(
+        collection,
+        rows,
+        ["team_id", "competition_id", "season_id",
          "text", "dense_vector", "sparse_vector"],
     )

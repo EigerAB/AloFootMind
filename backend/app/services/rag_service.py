@@ -20,11 +20,12 @@ from pymilvus import (
 from app.db.redis_client import get_redis
 from app.services.embedder import embed_single
 
-QUERY_LEVELS = ("match_level", "tactical_level", "player_level")
+QUERY_LEVELS = ("match_level", "tactical_level", "player_level", "team_tactical_level")
 COLLECTION_MAP = {
     "match_level": "match_summaries",
     "tactical_level": "tactical_segments",
     "player_level": "player_profiles",
+    "team_tactical_level": "team_tactical_profiles",
 }
 RAG_CACHE_TTL = 600
 
@@ -60,6 +61,15 @@ _PLAYER_KEYWORDS_CN = re.compile(
     re.IGNORECASE,
 )
 
+_TEAM_TACTICAL_KEYWORDS = re.compile(
+    r"\b(style|playstyle|characteristics|tendencies|approach|system|how.*play|playing style|tactical profile)\b",
+    re.IGNORECASE,
+)
+_TEAM_TACTICAL_KEYWORDS_CN = re.compile(
+    r"特点|风格|体系|打法|习惯|偏好|倾向|踢法|战术特征|踢球方式|如何踢|怎么踢",
+    re.IGNORECASE,
+)
+
 
 def classify_query(query: str) -> list[str]:
     """
@@ -70,7 +80,10 @@ def classify_query(query: str) -> list[str]:
     levels: list[str] = []
     if _PLAYER_KEYWORDS.search(query) or _PLAYER_KEYWORDS_CN.search(query):
         levels.append("player_level")
-    if _TACTICAL_KEYWORDS.search(query) or _TACTICAL_KEYWORDS_CN.search(query):
+    # team_tactical_level takes priority over tactical_level for aggregated style queries
+    if _TEAM_TACTICAL_KEYWORDS.search(query) or _TEAM_TACTICAL_KEYWORDS_CN.search(query):
+        levels.append("team_tactical_level")
+    elif _TACTICAL_KEYWORDS.search(query) or _TACTICAL_KEYWORDS_CN.search(query):
         levels.append("tactical_level")
     if _MATCH_KEYWORDS.search(query) or _MATCH_KEYWORDS_CN.search(query):
         levels.append("match_level")
@@ -149,9 +162,11 @@ def _hybrid_search(
         expr=milvus_filter,
     )
 
-    # Collection-specific output fields (player_profiles has no match_id)
+    # Collection-specific output fields
     if collection_name == "player_profiles":
         output_fields = ["text", "player_id", "competition_id", "season_id", "team_id"]
+    elif collection_name == "team_tactical_profiles":
+        output_fields = ["text", "team_id", "competition_id", "season_id"]
     else:
         output_fields = ["text", "match_id", "competition_id", "season_id"]
 
@@ -174,6 +189,8 @@ def _hybrid_search(
         }
         if collection_name == "player_profiles":
             hit_dict["player_id"] = entity.get("player_id")
+            hit_dict["team_id"] = entity.get("team_id")
+        elif collection_name == "team_tactical_profiles":
             hit_dict["team_id"] = entity.get("team_id")
         else:
             hit_dict["match_id"] = entity.get("match_id")
@@ -210,7 +227,7 @@ async def _set_cached(key: str, results: list[dict]) -> None:
 
 async def retrieve(
     query: str,
-    top_k: int = 5,
+    top_k: int = 10,
     competition_id: int | None = None,
     season_id: int | None = None,
     team_id: int | None = None,
@@ -218,6 +235,7 @@ async def retrieve(
     match_ids: list[int] | None = None,
     player_ids: list[int] | None = None,
     force_levels: list[str] | None = None,
+    score_threshold: float | None = None,
 ) -> list[dict]:
     """
     Full RAG retrieval pipeline:
@@ -286,4 +304,6 @@ async def retrieve(
         all_results.extend(hits)
 
     all_results.sort(key=lambda x: x["score"], reverse=True)
+    if score_threshold is not None:
+        all_results = [r for r in all_results if r["score"] >= score_threshold]
     return all_results[:top_k * len(levels)]

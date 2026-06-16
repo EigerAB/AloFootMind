@@ -11,6 +11,8 @@ _model: Any = None
 def _get_model() -> Any:
     global _model
     if _model is None:
+        import os
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
         from FlagEmbedding import BGEM3FlagModel
         _model = BGEM3FlagModel(settings.EMBEDDING_MODEL, use_fp16=True)
     return _model

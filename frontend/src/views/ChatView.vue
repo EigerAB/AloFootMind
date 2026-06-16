@@ -44,7 +44,7 @@
         </div>
         <!-- User message -->
         <div v-else-if="msg.role === 'user'" class="flex justify-end">
-          <div class="bg-green-800 text-white text-sm rounded-2xl rounded-tr-sm px-4 py-3 max-w-lg">
+          <div class="bg-green-800 text-white text-sm rounded-2xl rounded-tr-sm px-4 py-3 max-w-lg whitespace-pre-wrap">
             {{ msg.content }}
           </div>
         </div>
@@ -55,7 +55,7 @@
           </div>
           <div class="flex-1 min-w-0">
             <div
-              class="bg-gray-900 border border-gray-800 rounded-2xl rounded-tl-sm px-4 py-3 text-sm prose-report max-w-3xl"
+              class="bg-gray-900 border border-gray-800 rounded-2xl rounded-tl-sm px-4 py-3 text-sm prose-report max-w-3xl w-fit"
               v-html="renderMarkdown(msg.content === '__INTERRUPTED__' ? t('chat.userCancelled') : msg.content)"
             />
             <div v-if="msg.sources?.length" class="mt-2 flex flex-wrap gap-1.5">
@@ -99,12 +99,15 @@
           您当前是访客客户，无法发送消息
         </div>
         <div class="flex gap-3">
-          <input
+          <textarea
+            ref="inputRef"
             v-model="inputText"
-            @keydown.enter.prevent="sendMessage()"
+            @keydown.enter="handleEnter"
+            @input="adjustHeight"
             :disabled="isStreaming || authStore.isGuest"
             :placeholder="authStore.isGuest ? '访客客户无法发送消息' : t('chat.inputPlaceholder')"
-            class="flex-1 bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-xl px-4 py-3 focus:ring-1 focus:ring-green-500 focus:outline-none disabled:opacity-50"
+            rows="1"
+            class="flex-1 bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-xl px-4 py-3 focus:ring-1 focus:ring-green-500 focus:outline-none disabled:opacity-50 resize-none overflow-y-auto"
           />
           <button
             v-if="!isStreaming"
@@ -230,6 +233,22 @@ function scrollToBottom() {
 // Keep scroll pinned to bottom whenever content changes
 watch([messages, streamBuffer, isStreaming], scrollToBottom)
 
+const inputRef = ref<HTMLTextAreaElement | null>(null)
+
+function handleEnter(e: KeyboardEvent) {
+  if (!e.shiftKey) {
+    e.preventDefault()
+    sendMessage()
+  }
+}
+
+function adjustHeight() {
+  const el = inputRef.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = el.scrollHeight + 'px'
+}
+
 function abortStream() {
   if (!isStreaming.value) return
   stopSse()
@@ -275,6 +294,7 @@ async function sendMessage(text?: string) {
   if (!query || isStreaming.value) return
 
   inputText.value = ''
+  nextTick(() => adjustHeight())
   messages.value.push({ role: 'user', content: query })
 
   // If new chat (no session yet), create session immediately so sidebar updates at once
