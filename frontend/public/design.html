@@ -323,18 +323,23 @@
 </div>
 <script>
 (function(){
-  var link=document.getElementById('theme-link');
-  var btn=document.getElementById('theme-toggle');
-  var saved=localStorage.getItem('design-theme');
-  var prefersDark=window.matchMedia('(prefers-color-scheme: dark)').matches;
-  var isDark=saved?saved==='dark':prefersDark;
+  var link = document.getElementById('theme-link');
+  var btn  = document.getElementById('theme-toggle');
+  var lightKey = 'theme-light';
+  // 默认 dark；theme-light 为 true 时才是 light
+  var isLight = localStorage.getItem(lightKey) === 'true';
   function apply(dark){
-    link.href=dark?'design_dark.css':'design.css';
-    btn.textContent=dark?'主题切换 ☀️':'主题切换 🌙';
-    localStorage.setItem('design-theme',dark?'dark':'light');
+    link.href = dark ? 'design_dark.css' : 'design.css';
+    btn.textContent = dark ? '主题切换 ☀️' : '主题切换 🌙';
+    localStorage.setItem(lightKey, dark ? 'false' : 'true');
   }
-  if(isDark) apply(true);
-  btn.addEventListener('click',function(){apply(link.href.indexOf('design_dark')===-1);});
+  // 默认 dark => isLight 为 false => apply(true)
+  apply(!isLight);
+  btn.addEventListener('click', function(){
+    // 当前如果是 dark（href 包含 design_dark），切到 light
+    var currentlyDark = link.href.indexOf('design_dark') !== -1;
+    apply(!currentlyDark);
+  });
 })();
 </script>
 </body>

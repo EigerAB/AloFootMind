@@ -18,12 +18,24 @@
           @select="onCompetitionSelect"
           class="w-56"
         />
-        <input
-          v-model="teamFilter"
-          @keyup.enter="filterByTeam"
-          :placeholder="t('matches.filterPlaceholder')"
-          class="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2 focus:ring-1 focus:ring-green-500 focus:outline-none w-48"
-        />
+        <div class="relative w-48">
+          <input
+            v-model="teamFilter"
+            @keyup.enter="filterByTeam"
+            :placeholder="t('matches.filterPlaceholder')"
+            class="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2 pr-8 focus:ring-1 focus:ring-green-500 focus:outline-none w-full"
+          />
+          <button
+            v-if="teamFilter"
+            @click="clearTeamFilter"
+            type="button"
+            class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
         <button
           @click="filterByTeam"
           class="px-4 py-2 bg-green-700 hover:bg-green-600 text-white text-sm rounded-lg transition-colors"
@@ -204,6 +216,10 @@ function onCompetitionSelect() {
   currentPage.value = 1
   jumpPage.value = 1
   loadMatches()
+}
+
+function clearTeamFilter() {
+  teamFilter.value = ''
 }
 
 async function filterByTeam() {

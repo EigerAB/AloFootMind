@@ -7,26 +7,28 @@
 
     <!-- Team selector -->
     <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-6">
+      <!-- Unified competition selector -->
+      <div class="mb-4">
+        <label class="block text-xs text-gray-500 mb-1.5">{{ t('preMatch.competition') }}</label>
+        <SearchableSelect
+          v-model="selectedComp"
+          :options="hierarchy"
+          :placeholder="t('preMatch.selectCompetition')"
+          track-key="competition_id"
+          display-key="competition_name"
+          :searchable="false"
+          @select="onCompetitionChange"
+        />
+      </div>
+
       <div class="grid md:grid-cols-2 gap-4 mb-4">
         <!-- Home -->
         <div>
-          <label class="block text-xs text-gray-500 mb-1.5">{{ t('preMatch.competition') }}</label>
-          <SearchableSelect
-            v-model="homeComp"
-            :options="hierarchy"
-            :placeholder="t('preMatch.selectCompetition')"
-            track-key="competition_id"
-            display-key="competition_name"
-            :searchable="false"
-            @select="onCompetitionChange('home')"
-            class="mb-3"
-          />
-
           <label class="block text-xs text-gray-500 mb-1.5">{{ t('preMatch.homeTeam') }}</label>
           <SearchableSelect
             v-model="homeTeam"
-            :options="homeFilteredTeams"
-            :disabled="!homeCompId"
+            :options="filteredTeams"
+            :disabled="!selectedCompId"
             :placeholder="t('preMatch.searchPlaceholder')"
             track-key="team_id"
             display-key="team_name"
@@ -36,23 +38,11 @@
 
         <!-- Away -->
         <div>
-          <label class="block text-xs text-gray-500 mb-1.5">{{ t('preMatch.competition') }}</label>
-          <SearchableSelect
-            v-model="awayComp"
-            :options="hierarchy"
-            :placeholder="t('preMatch.selectCompetition')"
-            track-key="competition_id"
-            display-key="competition_name"
-            :searchable="false"
-            @select="onCompetitionChange('away')"
-            class="mb-3"
-          />
-
           <label class="block text-xs text-gray-500 mb-1.5">{{ t('preMatch.awayTeam') }}</label>
           <SearchableSelect
             v-model="awayTeam"
-            :options="awayFilteredTeams"
-            :disabled="!awayCompId"
+            :options="filteredTeams"
+            :disabled="!selectedCompId"
             :placeholder="t('preMatch.searchPlaceholder')"
             track-key="team_id"
             display-key="team_name"
@@ -217,12 +207,10 @@ const toastRef = ref<InstanceType<typeof ToastNotification> | null>(null)
 
 const hierarchy = ref<CompetitionWithTeams[]>([])
 
-const homeComp = ref<CompetitionWithTeams | null>(null)
-const homeCompId = computed(() => homeComp.value?.competition_id ?? null)
-const homeTeam = ref<Team | null>(null)
+const selectedComp = ref<CompetitionWithTeams | null>(null)
+const selectedCompId = computed(() => selectedComp.value?.competition_id ?? null)
 
-const awayComp = ref<CompetitionWithTeams | null>(null)
-const awayCompId = computed(() => awayComp.value?.competition_id ?? null)
+const homeTeam = ref<Team | null>(null)
 const awayTeam = ref<Team | null>(null)
 
 const isRunning = ref(false)
@@ -245,13 +233,8 @@ const confirmAction = ref<(() => void) | null>(null)
 
 const { start: startSse, stop: stopSse } = useSseStream()
 
-const homeFilteredTeams = computed(() => {
-  const comp = hierarchy.value.find(c => c.competition_id === homeCompId.value)
-  return comp?.teams ?? []
-})
-
-const awayFilteredTeams = computed(() => {
-  const comp = hierarchy.value.find(c => c.competition_id === awayCompId.value)
+const filteredTeams = computed(() => {
+  const comp = hierarchy.value.find(c => c.competition_id === selectedCompId.value)
   return comp?.teams ?? []
 })
 
@@ -310,12 +293,9 @@ function formatTime(iso: string) {
   return `${s} (UTC+8)`
 }
 
-function onCompetitionChange(side: 'home' | 'away') {
-  if (side === 'home') {
-    homeTeam.value = null
-  } else {
-    awayTeam.value = null
-  }
+function onCompetitionChange() {
+  homeTeam.value = null
+  awayTeam.value = null
 }
 
 
