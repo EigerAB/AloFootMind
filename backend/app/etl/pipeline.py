@@ -18,6 +18,7 @@ from app.etl.milvus_writer import (
     write_player_profiles,
     write_tactical_segments,
     write_team_tactical_profiles,
+    write_team_tactical_profiles,
 )
 from app.etl.parser import (
     iter_all_matches,
@@ -31,9 +32,11 @@ from app.etl.parser import (
 from app.etl.text_generator import (
     aggregate_player_season_stats,
     aggregate_team_tactical_stats,
+    aggregate_team_tactical_stats,
     generate_match_summary,
     generate_player_profile,
     generate_tactical_segment_text,
+    generate_team_tactical_profile,
     generate_team_tactical_profile,
 )
 
@@ -351,8 +354,23 @@ async def ingest_player_profiles(
     _pcol = _Collection("player_profiles")
     _pcol.load()
 
+    from pymilvus import Collection as _Collection
+    _pcol = _Collection("player_profiles")
+    _pcol.load()
+
     for player_row in players:
         pid = player_row["player_id"]
+
+        # Skip if already exists in Milvus for this season
+        existing = _pcol.query(
+            expr=f"player_id == {pid} && season_id == {season_id}",
+            output_fields=["player_id"],
+            limit=1,
+        )
+        if existing:
+            logger.debug(f"[ETL] Player profile already exists for pid={pid}, skipping.")
+            continue
+
 
         # Skip if already exists in Milvus for this season
         existing = _pcol.query(
@@ -385,6 +403,88 @@ async def ingest_player_profiles(
                 "text": profile_text,
             }])
             logger.info(f"[ETL] Player profile written: {player_row['player_name']} (pid={pid})")
+
+
+async def ingest_team_tactical_profiles(
+    session: AsyncSession,
+    competition_id: int,
+    season_id: int,
+    competition_name: str,
+    season_name: str,
+    dry_run: bool = False,
+) -> None:
+    """Generate and embed team tactical profiles for a season after all matches are ingested."""
+    from sqlalchemy import text as sqla_text
+
+    result = await session.execute(
+        sqla_text("""
+            SELECT DISTINCT
+                CASE WHEN m.home_team_id = t.team_id THEN m.home_team_id
+                     ELSE m.away_team_id END AS team_id,
+                t.team_name
+            FROM matches m
+            JOIN seasons s ON m.season_id = s.id
+            JOIN teams t ON t.team_id = m.home_team_id OR t.team_id = m.away_team_id
+            WHERE s.competition_id = :cid AND s.season_id = :sid
+        """),
+        {"cid": competition_id, "sid": season_id},
+    )
+    teams = result.mappings().all()
+
+    result2 = await session.execute(
+        sqla_text("""
+            SELECT m.match_id
+            FROM matches m
+            JOIN seasons s ON m.season_id = s.id
+            WHERE s.competition_id = :cid AND s.season_id = :sid
+        """),
+        {"cid": competition_id, "sid": season_id},
+    )
+    match_ids = [r[0] for r in result2]
+
+    matches_events: list[tuple[int, list[dict]]] = []
+    for mid in match_ids:
+        evs = load_events(mid)
+        matches_events.append((mid, evs))
+
+    from pymilvus import Collection as _Collection
+    _tcol = _Collection("team_tactical_profiles")
+    _tcol.load()
+
+    for team_row in teams:
+        tid = team_row["team_id"]
+        team_name = team_row["team_name"]
+
+        # Skip if already exists in Milvus for this season
+        existing = _tcol.query(
+            expr=f"team_id == {tid} && season_id == {season_id}",
+            output_fields=["team_id"],
+            limit=1,
+        )
+        if existing:
+            logger.debug(f"[ETL] Team tactical profile already exists for tid={tid}, skipping.")
+            continue
+
+        stats = aggregate_team_tactical_stats(tid, matches_events)
+        if stats["total_possessions"] == 0:
+            logger.warning(f"[ETL] No possession data for team_id={tid}, skipping.")
+            continue
+
+        if not dry_run:
+            profile_text = await generate_team_tactical_profile(
+                team_name=team_name,
+                team_id=tid,
+                competition_name=competition_name,
+                season_name=season_name,
+                stats=stats,
+            )
+            write_team_tactical_profiles([{
+                "team_id": tid,
+                "competition_id": competition_id,
+                "season_id": season_id,
+                "text": profile_text,
+            }])
+            logger.info(f"[ETL] Team tactical profile written: {team_name} (tid={tid})")
 
 
 async def ingest_team_tactical_profiles(

@@ -91,11 +91,18 @@ def generate_tactical_segment_text(
     if has_shot:
         outcome_desc = {
             "Goal": "resulting in a GOAL",
+            "进球": "resulting in a GOAL",
             "Saved": "shot saved by goalkeeper",
+            "扑救": "shot saved by goalkeeper",
+            "Saved To Post": "shot saved onto the post",
+            "扑救到柱": "shot saved onto the post",
             "Off T": "shot off target",
+            "偏离目标": "shot off target",
             "Blocked": "shot blocked",
+            "被阻挡": "shot blocked",
             "Wayward": "shot wide",
             "Post": "struck the post",
+            "门柱": "struck the post",
         }.get(shot_outcome or "", f"shot outcome: {shot_outcome}")
         parts.append(f"Ended with a shot attempt, {outcome_desc}.")
     else:
@@ -107,8 +114,40 @@ def generate_tactical_segment_text(
             "施压": "disrupted by opponent pressure",
             "Foul Committed": "ended with a foul",
             "犯规": "ended with a foul",
+            "Foul Won": "won a foul",
+            "被犯规": "won a foul",
             "Clearance": "cleared by defense",
             "解围": "cleared by defense",
+            "Interception": "ended with an interception",
+            "拦截": "ended with an interception",
+            "Dribbled Past": "dribbled past by opponent",
+            "被过人": "dribbled past by opponent",
+            "Dispossessed": "possession dispossessed",
+            "控球失误": "possession dispossessed",
+            "Tackle": "dispossessed by tackle",
+            "被断球": "dispossessed by tackle",
+            "Miscontrol": "possession lost via miscontrol",
+            "失控": "possession lost via miscontrol",
+            "Error": "ended with an error",
+            "错误": "ended with an error",
+            "Goal Keeper": "dealt with by goalkeeper",
+            "门将": "dealt with by goalkeeper",
+            "Block": "blocked",
+            "封堵": "blocked",
+            "Offside": "flagged offside",
+            "越位": "flagged offside",
+            "Duel": "ended with a duel",
+            "对抗": "ended with a duel",
+            "Substitution": "ended with a substitution",
+            "换人": "ended with a substitution",
+            "Injury Stoppage": "interrupted by injury",
+            "伤停": "interrupted by injury",
+            "Tactical Shift": "ended with tactical shift",
+            "战术调整": "ended with tactical shift",
+            "Referee Drop": "ended with referee drop ball",
+            "裁判坠球": "ended with referee drop ball",
+            "Half Start": "half started",
+            "半场开始": "half started",
         }
         last_label = _CN_EN_MAP.get(last_type, f"ended with {last_type.lower()}")
         parts.append(f"Possession {last_label}.")
@@ -239,9 +278,9 @@ def aggregate_player_season_stats(
             if ev_type in ("Shot", "射门"):
                 shots += 1
                 outcome = (ev.get("shot") or {}).get("outcome", {}).get("name", "")
-                if outcome == "Goal":
+                if outcome in ("Goal", "进球"):
                     goals += 1
-                if outcome in ("Goal", "Saved", "Saved To Post"):
+                if outcome in ("Goal", "Saved", "Saved To Post", "进球", "扑救", "扑救到柱"):
                     shots_on_target += 1
 
             elif ev_type in ("Pass", "传球"):
