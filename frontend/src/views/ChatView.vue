@@ -58,14 +58,43 @@
               class="bg-gray-900 border border-gray-800 rounded-2xl rounded-tl-sm px-4 py-3 text-sm prose-report max-w-3xl w-fit"
               v-html="renderMarkdown(msg.content === '__INTERRUPTED__' ? t('chat.userCancelled') : msg.content)"
             />
-            <div v-if="msg.sources?.length" class="mt-2 flex flex-wrap gap-1.5">
-              <span
-                v-for="(s, si) in msg.sources"
-                :key="si"
-                class="text-xs bg-gray-800 text-gray-500 px-2 py-1 rounded-md"
+            <div v-if="msg.sources?.length" class="mt-2 max-w-3xl">
+              <div class="flex flex-wrap gap-1.5">
+                <button
+                  v-for="(s, si) in msg.sources"
+                  :key="si"
+                  @click="toggleSources(i)"
+                  type="button"
+                  class="text-xs px-2 py-1 rounded-md border transition-colors cursor-pointer bg-gray-800 text-gray-500 border-gray-700/40"
+                >
+                  📄 {{ s.collection.replace('_', ' ') }}
+                  <span v-if="s.score !== undefined" class="opacity-70 ml-0.5">
+                    {{ s.score.toFixed(3) }}
+                  </span>
+                  <span class="opacity-60 ml-0.5">
+                    {{ expandedSourceMsgs.has(i) ? '▲' : '▼' }}
+                  </span>
+                </button>
+              </div>
+              <div
+                v-if="expandedSourceMsgs.has(i)"
+                class="mt-2 space-y-1.5"
               >
-                📄 {{ s.collection.replace('_', ' ') }}
-              </span>
+                <div
+                  v-for="(s, si) in msg.sources"
+                  :key="si"
+                  class="text-xs bg-gray-800/60 rounded px-2.5 py-1.5 border border-gray-700/50"
+                >
+                  <div class="flex items-center gap-2 mb-1">
+                    <span class="text-gray-500">[{{ si + 1 }}]</span>
+                    <span class="text-gray-600">{{ s.collection }}</span>
+                    <span v-if="s.score !== undefined" class="ml-auto text-gray-500">
+                      score: {{ s.score.toFixed(4) }}
+                    </span>
+                  </div>
+                  <div class="text-gray-400 leading-relaxed">{{ s.text }}</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -155,7 +184,7 @@ const localeSuggestions = computed(() => tm('chat.suggestions') as string[])
 interface Message {
   role: 'user' | 'assistant' | 'system'
   content: string
-  sources?: { text: string; collection: string }[]
+  sources?: { text: string; collection: string; score?: number }[]
 }
 
 const messages = ref<Message[]>([])
@@ -176,6 +205,23 @@ const qaMeta = ref<QaMeta>({
 })
 
 const streamingSessionId = ref<number | null>(null)
+const expandedSourceMsgs = ref<Set<number>>(new Set())
+
+function toggleSources(msgIdx: number) {
+  const s = expandedSourceMsgs.value
+  if (s.has(msgIdx)) {
+    s.delete(msgIdx)
+  } else {
+    s.add(msgIdx)
+  }
+}
+
+// function sourceColorClass(score: number | undefined): string {
+//   if (score === undefined) return 'bg-gray-800 text-gray-500'
+//   if (score >= 0.3) return 'bg-green-900/40 text-green-400 border-green-700/40'
+//   if (score >= 0.15) return 'bg-yellow-900/40 text-yellow-400 border-yellow-700/40'
+//   return 'bg-red-900/40 text-red-400 border-red-700/40'
+// }
 
 const { post: postSse, stop: stopSse } = useSseStream()
 const { render: renderMarkdown } = useMarkdown()

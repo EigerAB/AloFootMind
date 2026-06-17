@@ -291,7 +291,7 @@ export interface PreMatchReport {
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
-  sources?: { text: string; collection: string }[]
+  sources?: { text: string; collection: string; score?: number }[]
 }
 
 export interface QaMeta {

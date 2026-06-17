@@ -310,7 +310,7 @@ async def chat(
                     yield f"data: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
 
                 sources = [
-                    {"text": r["text"][:120], "collection": r.get("collection", "")}
+                    {"text": r["text"], "collection": r.get("collection", ""), "score": r.get("score", 0)}
                     for r in rag_context[:3]
                 ]
             elif route == "direct_answer":
