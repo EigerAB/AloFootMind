@@ -279,7 +279,7 @@ async def stream_boundary_answer(
 请礼貌地告知用户你的专长范围，并给出示例问题引导用户回到足球主题。
 
 数据边界说明：
-- 你目前仅有 2023/2024 赛季男子德甲联赛的数据
+- 你目前拥有 2023/2024 赛季男子德甲联赛和 2024 年欧洲杯的数据
 - 可以回答战术分析、球员数据、比赛情报等问题
 
 回复要求：
@@ -293,7 +293,7 @@ async def stream_boundary_answer(
 The user has been chatting without football-related questions for several turns.
 Politely inform them of your scope and give example questions to guide them back.
 
-Data scope: You only have 2023/2024 Bundesliga data.
+Data scope: You have 2023/2024 Bundesliga and UEFA Euro 2024 data.
 You can answer tactical analysis, player stats, and match intelligence questions."""
 
     messages: list = [SystemMessage(content=system_prompt)]
@@ -405,8 +405,8 @@ async def stream_answer(
    - 你应该记住用户提到的个人信息（姓名、身份、偏好）。
    - 回答用户关于自己的问题时，优先从【用户信息】区块提取，不要用"根据提供的上下文"。
 
-数据边界：你目前仅有 2023/2024 赛季男子德甲联赛的数据。
-如果被问到其他联赛或赛季，请礼貌说明数据范围。
+数据边界：你目前拥有 2023/2024 赛季男子德甲联赛和 2024 年欧洲杯（UEFA Euro 2024）的数据。
+当被问到其他联赛或赛季时，请礼貌说明数据范围。
 
 请用 Markdown 格式回复。"""
     else:
@@ -422,7 +422,7 @@ You have access to two sources of information:
    - When answering questions about the user, extract from the user profile above.
      Do NOT say "based on the provided context" when referring to user facts.
 
-Data boundary: You only have data for the 2023/2024 Bundesliga season.
+Data boundary: You have data for the 2023/2024 Bundesliga season and UEFA Euro 2024.
 If asked about other leagues or seasons, politely state this limitation.
 
 Format your answers in clear Markdown."""

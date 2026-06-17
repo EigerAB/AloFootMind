@@ -35,7 +35,7 @@ RAG_CACHE_TTL = 600
 # ─────────────────────────────────────────────
 
 _MATCH_KEYWORDS = re.compile(
-    r"\b(match|game|result|score|fixture|final|win|lose|draw|season performance|contest)\b",
+    r"\b(match|game|result|score|fixture|final|win|lose|draw|season performance|contest|euro|euro cup|uefa euro)\b",
     re.IGNORECASE,
 )
 _TACTICAL_KEYWORDS = re.compile(
@@ -49,7 +49,7 @@ _PLAYER_KEYWORDS = re.compile(
 
 # 中文关键词（用于中文查询意图分类）
 _MATCH_KEYWORDS_CN = re.compile(
-    r"比赛|赛事|结果|比分|胜负|平局|赛季|表现|战绩|对阵|交锋|复盘|总结",
+    r"比赛|赛事|结果|比分|胜负|平局|赛季|表现|战绩|对阵|交锋|复盘|总结|欧洲杯|欧锦赛|欧洲足球锦标赛",
     re.IGNORECASE,
 )
 _TACTICAL_KEYWORDS_CN = re.compile(

@@ -39,7 +39,7 @@ _STEP_MSGS: dict[str, dict[str, dict[str, str]]] = {
     },
     "matchup_analysis": {
         "en": {
-            "started": "Running GPT-4o matchup analysis...",
+            "started": "Running LLM matchup analysis...",
             "completed": "Matchup analysis complete.",
         },
         "zh": {

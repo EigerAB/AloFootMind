@@ -241,7 +241,7 @@ async def tactical_analysis(state: AnalysisState) -> dict:
     node = "tactical_analysis"
     try:
         step_log = await push_step(
-            state, node, "started", "Running GPT-4o tactical analysis..."
+            state, node, "started", "Running LLM tactical analysis..."
         )
 
         match_data = (state.get("analysis_result") or {}).get("match_data", {})
