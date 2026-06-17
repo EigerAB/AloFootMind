@@ -43,7 +43,7 @@ _STEP_MSGS: dict[str, dict[str, dict[str, str]]] = {
             "completed": "Matchup analysis complete.",
         },
         "zh": {
-            "started": "正在运行 GPT-4o 对阵分析...",
+            "started": "正在运行 对阵分析...",
             "completed": "对阵分析完成。",
         },
     },

@@ -170,12 +170,14 @@ import { useChatStore } from '@/stores/chat'
 import { useSseStream } from '@/composables/useSseStream'
 import { useMarkdown } from '@/composables/useMarkdown'
 import { api, type ChatMessage, type QaMeta } from '@/api'
+import { useLoadingStore } from '@/stores/loading'
 import AuthModal from '@/components/AuthModal.vue'
 import ToastNotification from '@/components/ToastNotification.vue'
 
 const { t, tm } = useI18n()
 const authStore = useAuthStore()
 const chatStore = useChatStore()
+const loadingStore = useLoadingStore()
 const route = useRoute()
 const router = useRouter()
 const showAuthModal = ref(false)
@@ -227,17 +229,22 @@ const { post: postSse, stop: stopSse } = useSseStream()
 const { render: renderMarkdown } = useMarkdown()
 
 async function loadSession(id: number) {
-  const res = await api.loadChatSession(id)
-  if (res) {
-    messages.value = res.messages.map((m: ChatMessage) => ({
-      role: m.role,
-      content: m.content,
-      sources: m.sources,
-    }))
-    qaMeta.value = res.qa_meta
-  } else {
-    messages.value = []
-    qaMeta.value = { football_intent_count: 0, generic_turn_count: 0 }
+  loadingStore.start()
+  try {
+    const res = await api.loadChatSession(id)
+    if (res) {
+      messages.value = res.messages.map((m: ChatMessage) => ({
+        role: m.role,
+        content: m.content,
+        sources: m.sources,
+      }))
+      qaMeta.value = res.qa_meta
+    } else {
+      messages.value = []
+      qaMeta.value = { football_intent_count: 0, generic_turn_count: 0 }
+    }
+  } finally {
+    loadingStore.stop()
   }
 }
 

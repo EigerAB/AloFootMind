@@ -192,6 +192,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api, type Team, type CompetitionWithTeams, type PreMatchReport } from '@/api'
 import { useAuthStore } from '@/stores/auth'
+import { useLoadingStore } from '@/stores/loading'
 import { useSseStream } from '@/composables/useSseStream'
 import AgentViewer from '@/components/AgentViewer.vue'
 import ReportViewer from '@/components/ReportViewer.vue'
@@ -202,6 +203,7 @@ import SearchableSelect from '@/components/SearchableSelect.vue'
 
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
+const loadingStore = useLoadingStore()
 const showAuthModal = ref(false)
 const toastRef = ref<InstanceType<typeof ToastNotification> | null>(null)
 
@@ -238,12 +240,21 @@ const filteredTeams = computed(() => {
   return comp?.teams ?? []
 })
 
-onMounted(async () => {
-  hierarchy.value = await api.getTeamsHierarchy().catch(() => [])
-  if (authStore.isLoggedIn) {
-    await loadReports()
+async function init() {
+  loadingStore.start()
+  try {
+    if (hierarchy.value.length === 0) {
+      hierarchy.value = await api.getTeamsHierarchy().catch(() => [])
+    }
+    if (authStore.isLoggedIn) {
+      await loadReports()
+    }
+  } finally {
+    loadingStore.stop()
   }
-})
+}
+
+onMounted(init)
 
 async function loadReports() {
   reportHistory.value = await api.getPreMatchReports().catch(() => [])

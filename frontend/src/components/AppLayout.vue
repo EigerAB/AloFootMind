@@ -306,6 +306,7 @@
     </Transition>
   </Teleport>
 
+  <LoadingOverlay />
   <ToastNotification ref="toastRef" />
 </template>
 
@@ -316,7 +317,9 @@ import { useI18n } from 'vue-i18n'
 import { setLocale, type LocaleKey } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
+import { useLoadingStore } from '@/stores/loading'
 import { api } from '@/api'
+import LoadingOverlay from '@/components/LoadingOverlay.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import ToastNotification from '@/components/ToastNotification.vue'
 import qqImg from '@/assets/images/qq.jpg'

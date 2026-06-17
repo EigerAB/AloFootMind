@@ -311,7 +311,7 @@ async def chat(
 
                 sources = [
                     {"text": r["text"], "collection": r.get("collection", ""), "score": r.get("score", 0)}
-                    for r in rag_context[:3]
+                    for r in rag_context[:5]
                 ]
             elif route == "direct_answer":
                 async for token in stream_direct_answer(query, history, language="zh"):

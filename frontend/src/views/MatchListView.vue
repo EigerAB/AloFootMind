@@ -48,14 +48,8 @@
     <!-- Table area -->
     <div class="flex-1 px-6 pb-4 min-h-0">
       <div class="max-w-6xl mx-auto h-full flex flex-col">
-        <!-- Loading -->
-        <div v-if="loading" class="text-center py-12 text-gray-500">
-          <div class="text-3xl mb-2 animate-spin inline-block">⚽</div>
-          <p>{{ t('matches.loading') }}</p>
-        </div>
-
         <!-- Error -->
-        <div v-else-if="error" class="bg-red-950/40 border border-red-800 rounded-xl p-4 text-red-400 text-sm">
+        <div v-if="error" class="bg-red-950/40 border border-red-800 rounded-xl p-4 text-red-400 text-sm">
           {{ error }}
         </div>
 
@@ -167,19 +161,20 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onActivated, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { api, type Competition, type Match } from '@/api'
+import { useLoadingStore } from '@/stores/loading'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 
 const { t } = useI18n()
 const $router = useRouter()
+const loadingStore = useLoadingStore()
 
 const competitions = ref<Competition[]>([])
 const matches = ref<Match[]>([])
 const total = ref(0)
-const loading = ref(false)
 const error = ref<string | null>(null)
 const selectedCompetition = ref<{ key: string; label: string; competition_id: number; season_id: number } | null>(null)
 const teamFilter = ref('')
@@ -240,7 +235,7 @@ async function filterByTeam() {
 }
 
 async function loadMatches() {
-  loading.value = true
+  loadingStore.start()
   error.value = null
   try {
     const { competition_id, season_id } = parseKey()
@@ -257,7 +252,7 @@ async function loadMatches() {
   } catch (e: unknown) {
     error.value = (e as Error).message
   } finally {
-    loading.value = false
+    loadingStore.stop()
   }
 }
 
@@ -288,10 +283,15 @@ function formatFormation(f: number) {
     .trim() || String(f)
 }
 
-onMounted(async () => {
-  competitions.value = await api.getCompetitions().catch(() => [])
+async function init() {
+  if (competitions.value.length === 0) {
+    competitions.value = await api.getCompetitions().catch(() => [])
+  }
   await loadMatches()
-})
+}
+
+onMounted(init)
+onActivated(init)
 </script>
 
 <style scoped>

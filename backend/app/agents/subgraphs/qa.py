@@ -221,6 +221,12 @@ async def rag_retrieval(state: AnalysisState) -> dict:
 
         ar = state.get("analysis_result") or {}
         levels = ar.get("query_levels", ["tactical_level"])
+        # Expand match-level queries to also retrieve tactical data
+        if "match_level" in levels:
+            if "tactical_level" not in levels:
+                levels = levels + ["tactical_level"]
+            if "team_tactical_level" not in levels:
+                levels = levels + ["team_tactical_level"]
         # Use rewritten (bilingual) query if available
         query = ar.get("rewritten_query") or state.get("query") or ""
 
