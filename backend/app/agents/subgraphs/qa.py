@@ -29,6 +29,74 @@ _ENTITY_DICT: dict[str, dict] = {}
 # e.g. {"勒沃库森": {"id": 904, "type": "team"}, ...}
 
 
+# Common Chinese player name → English name as stored in DB
+_PLAYER_ALIASES: dict[str, str] = {
+    "凯恩": "Harry Kane",
+    "穆勒": "Thomas Müller",
+    "穆西亚拉": "Jamal Musiala",
+    "格雷茨卡": "Leon Goretzka",
+    "基米希": "Joshua Kimmich",
+    "诺伊尔": "Manuel Neuer",
+    "萨内": "Leroy Sané",
+    "科曼": "Kingsley Coman",
+    "格纳布里": "Serge Gnabry",
+    "帕利尼亚": "João Palhinha",
+    "格拉内罗": "Granit Xhaka",
+    "赫拉特": "Granit Xhaka",
+    "沙卡": "Bukayo Saka",
+    "特尔": "Florian Wirtz",
+    "维尔茨": "Florian Wirtz",
+    "格里马尔多": "Alejandro Grimaldo",
+    "齐默尔曼": "Lukas Hradecky",
+    "本塞拜尼": "Granit Xhaka",
+    "多亚克": "Patrik Schick",
+    "霍夫曼": "Jonas Hofmann",
+    "安德里奇": "Robert Andrich",
+    "塔": "Edmond Tapsoba",
+    "克拉默": "Florian Kramer",
+    "哈弗茨": "Kai Havertz",
+    "克罗斯": "Toni Kroos",
+    "京多安": "İlkay Gündoğan",
+    "胡梅尔斯": "Mats Hummels",
+    "布兰特": "Julian Brandt",
+    "罗伊斯": "Marco Reus",
+    "萨拉比亚": "Pablo Sarabia",
+    "亚马尔": "Lamine Yamal",
+    "佩德里": "Pedri",
+    "科利亚西亚斯": "Alejandro Balde",
+    "费兰托雷斯": "Ferran Torres",
+    "莫拉塔": "Álvaro Morata",
+    "罗德里": "Rodri",
+    "法比安": "Fabián Ruiz",
+    "卡瓦哈尔": "Dani Carvajal",
+    "纳乔": "Nacho",
+    "勒诺曼": "William Saliba",
+    "姆巴佩": "Kylian Mbappé",
+    "格列兹曼": "Antoine Griezmann",
+    "坎特": "N'Golo Kanté",
+    "图拉姆": "Marcus Thuram",
+    "吉鲁": "Olivier Giroud",
+    "帕瓦尔": "Benjamin Pavard",
+    "科纳特": "Ibrahima Konaté",
+    "索勒": "Carlos Soler",
+    "奥利莫": "Nico Williams",
+}
+
+# Common Chinese team name abbreviations → canonical name suffix to match DB
+_TEAM_ALIASES: dict[str, str] = {
+    "拜仁": "拜仁慕尼黑",
+    "多特": "多特蒙德",
+    "门兴": "门兴格拉德巴赫",
+    "莱比锡": "莱比锡红牛",
+    "不莱梅": "云达不莱梅",
+    "沙尔克": "沙尔克04",
+    "柏林联": "柏林联合",
+    "海登海": "海登海姆",
+    "达姆": "达姆施塔特",
+    "霍芬": "霍芬海姆",
+}
+
+
 async def _load_entity_dictionary() -> dict[str, dict]:
     """Load team & player names from PostgreSQL into memory cache."""
     global _ENTITY_DICT
@@ -38,17 +106,34 @@ async def _load_entity_dictionary() -> dict[str, dict]:
     async with AsyncSessionLocal() as session:
         # Teams (Chinese names)
         team_result = await session.execute(text("SELECT team_id, team_name FROM teams"))
-        for row in team_result.mappings():
+        team_rows = list(team_result.mappings())
+        canonical: dict[str, dict] = {}
+        for row in team_rows:
             name = row["team_name"]
             if name:
-                _ENTITY_DICT[name] = {"id": row["team_id"], "type": "team"}
+                entry = {"id": row["team_id"], "type": "team"}
+                _ENTITY_DICT[name] = entry
+                canonical[name] = entry
+
+        # Register team aliases: "拜仁" → same entry as "拜仁慕尼黑"
+        for alias, full_name in _TEAM_ALIASES.items():
+            if full_name in canonical and alias not in _ENTITY_DICT:
+                _ENTITY_DICT[alias] = canonical[full_name]
 
         # Players (English names from DB)
         player_result = await session.execute(text("SELECT player_id, player_name FROM players"))
+        player_canonical: dict[str, dict] = {}
         for row in player_result.mappings():
             name = row["player_name"]
             if name:
-                _ENTITY_DICT[name] = {"id": row["player_id"], "type": "player"}
+                entry = {"id": row["player_id"], "type": "player"}
+                _ENTITY_DICT[name] = entry
+                player_canonical[name] = entry
+
+        # Register player aliases: "凯恩" → same entry as "Harry Kane"
+        for alias, full_name in _PLAYER_ALIASES.items():
+            if full_name in player_canonical and alias not in _ENTITY_DICT:
+                _ENTITY_DICT[alias] = player_canonical[full_name]
 
     logger.info("Loaded %d entities into QA dictionary", len(_ENTITY_DICT))
     return _ENTITY_DICT
@@ -155,6 +240,11 @@ async def query_classify(state: AnalysisState) -> dict:
         # Use rewritten query if available, otherwise original
         query = ar.get("rewritten_query") or state.get("query") or ""
         levels = classify_query(query)
+        # If player entities were extracted in query_rewrite, force player_level
+        # (regex-based classify only matches generic keywords like "player", not proper names)
+        entities = ar.get("extracted_entities", [])
+        if any(e["type"] == "player" for e in entities) and "player_level" not in levels:
+            levels = ["player_level"] + levels
         step_log = await push_step(
             state, node, "completed",
             f"Query classified as: {', '.join(levels)}"
@@ -230,18 +320,71 @@ async def rag_retrieval(state: AnalysisState) -> dict:
         # Use rewritten (bilingual) query if available
         query = ar.get("rewritten_query") or state.get("query") or ""
 
-        # Extract team_id filter from matched entities (if exactly one team matched)
+        # Extract entity filters from matched entities
         entities = ar.get("extracted_entities", [])
         team_ids_in_query = [e["id"] for e in entities if e["type"] == "team"]
+        player_ids_in_query = [e["id"] for e in entities if e["type"] == "player"]
         team_id_filter = team_ids_in_query[0] if len(team_ids_in_query) == 1 else None
 
-        results = await retrieve(
-            query=query,
-            top_k=10,
-            team_id=team_id_filter,
-            force_levels=levels,
-            score_threshold=None,
-        )
+        # For multi-player queries: retrieve player_profiles separately per player
+        # so each player gets equal representation
+        if len(player_ids_in_query) > 1 and "player_level" in levels:
+            other_levels = [l for l in levels if l != "player_level"]
+            per_player_results: list[dict] = []
+            for pid in player_ids_in_query:
+                player_hits = await retrieve(
+                    query=query,
+                    top_k=2,
+                    player_ids=[pid],
+                    force_levels=["player_level"],
+                    score_threshold=None,
+                )
+                per_player_results.extend(player_hits)
+            other_results = await retrieve(
+                query=query,
+                top_k=10,
+                team_id=team_id_filter,
+                force_levels=other_levels if other_levels else ["tactical_level"],
+                score_threshold=None,
+            ) if other_levels else []
+            seen_texts: set[str] = {r["text"] for r in per_player_results}
+            deduped_other = [r for r in other_results if r["text"] not in seen_texts]
+            results = per_player_results + deduped_other
+
+        # For multi-team queries: retrieve team_tactical_profiles separately per team
+        # so each team gets equal representation, then retrieve other levels normally
+        elif len(team_ids_in_query) > 1 and "team_tactical_level" in levels:
+            other_levels = [l for l in levels if l != "team_tactical_level"]
+            per_team_results: list[dict] = []
+            for tid in team_ids_in_query:
+                team_hits = await retrieve(
+                    query=query,
+                    top_k=3,
+                    team_id=tid,
+                    force_levels=["team_tactical_level"],
+                    score_threshold=None,
+                )
+                per_team_results.extend(team_hits)
+            other_results = await retrieve(
+                query=query,
+                top_k=10,
+                team_id=None,
+                force_levels=other_levels if other_levels else ["tactical_level"],
+                score_threshold=None,
+            ) if other_levels else []
+            seen_texts = {r["text"] for r in per_team_results}
+            deduped_other = [r for r in other_results if r["text"] not in seen_texts]
+            results = per_team_results + deduped_other
+
+        else:
+            results = await retrieve(
+                query=query,
+                top_k=10,
+                team_id=team_id_filter,
+                player_ids=player_ids_in_query if player_ids_in_query else None,
+                force_levels=levels,
+                score_threshold=None,
+            )
 
         if not results:
             step_log = await push_step(state, node, "completed", "No matching documents found.")
