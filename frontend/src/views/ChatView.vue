@@ -53,12 +53,12 @@
           <div class="w-8 h-8 bg-gray-800 border border-gray-700 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-sm">
             🤖
           </div>
-          <div class="flex-1 min-w-0">
+          <div class="min-w-0 max-w-3xl overflow-hidden">
             <div
-              class="bg-gray-900 border border-gray-800 rounded-2xl rounded-tl-sm px-4 py-3 text-sm prose-report max-w-3xl w-fit"
+              class="bg-gray-900 border border-gray-800 rounded-2xl rounded-tl-sm px-4 py-3 text-sm prose-report overflow-hidden"
               v-html="renderMarkdown(msg.content === '__INTERRUPTED__' ? t('chat.userCancelled') : msg.content)"
             />
-            <div v-if="msg.sources?.length" class="mt-2 max-w-3xl">
+            <div v-if="msg.sources?.length" class="mt-2">
               <div class="flex flex-wrap gap-1.5">
                 <button
                   v-for="(s, si) in msg.sources"
@@ -103,7 +103,8 @@
       <!-- Streaming indicator -->
       <div v-if="isStreaming" class="flex gap-3">
         <div class="w-8 h-8 bg-gray-800 border border-gray-700 rounded-full flex items-center justify-center shrink-0 text-sm">🤖</div>
-        <div class="bg-gray-900 border border-gray-800 rounded-2xl rounded-tl-sm px-4 py-3 text-sm min-w-32">
+        <div class="min-w-0 max-w-3xl overflow-hidden">
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl rounded-tl-sm px-4 py-3 text-sm min-w-32 overflow-hidden">
           <div
             v-if="streamBuffer"
             class="prose-report"
@@ -114,6 +115,7 @@
             <span class="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
             <span class="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
           </div>
+        </div>
         </div>
       </div>
     </div>

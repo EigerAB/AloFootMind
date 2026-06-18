@@ -36,7 +36,7 @@ body {
 .prose-report li { @apply mb-1; }
 .prose-report li > p { @apply mb-1 mt-0; }
 .prose-report li:empty { display: none; }
-.prose-report table { @apply w-full border-collapse mb-4; }
+.prose-report table { @apply w-full border-collapse mb-4 table-fixed; }
 .prose-report th { @apply border border-gray-600 px-3 py-2 bg-gray-800 text-gray-100 text-sm; }
 .prose-report td { @apply border border-gray-700 px-3 py-2 text-gray-300 text-sm; }
 .prose-report code { @apply bg-gray-800 text-green-400 px-1.5 py-0.5 rounded text-sm font-mono; }
