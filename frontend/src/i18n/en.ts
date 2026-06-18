@@ -2,6 +2,7 @@ export default {
   app: {
     name: 'AloFootMind',
     tagline: 'Multi-Agent Football Analysis',
+    version: 'Version',
     dataSource: 'StatsBomb Open Data',
   },
   nav: {

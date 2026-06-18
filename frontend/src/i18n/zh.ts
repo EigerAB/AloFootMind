@@ -2,6 +2,7 @@ export default {
   app: {
     name: 'AloFootMind',
     tagline: '多智能体足球赛事分析',
+    version: '版本号',
     dataSource: 'StatsBomb 开放数据',
   },
   nav: {

@@ -7,6 +7,7 @@
           <span class="text-green-400">Alo</span>FootMind
         </h1>
         <p class="text-xs text-gray-500 mt-0.5">{{ t('app.tagline') }}</p>
+        <p class="text-[10px] text-gray-600 mt-0.5">{{ t('app.version') }}: v1.0.0</p>
       </div>
       <nav class="flex flex-col gap-1 p-3 flex-1 overflow-y-auto">
         <RouterLink
