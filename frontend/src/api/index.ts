@@ -341,7 +341,7 @@ export const api = {
               const data = line.slice(6)
               try {
                 const parsed = JSON.parse(data)
-                if (parsed.token) options.onToken(parsed.token)
+                if (parsed.token) options.onToken?.(parsed.token)
                 if (parsed.sources || parsed.qa_meta || parsed.session_id !== undefined) {
                   options.onDone(parsed)
                 }

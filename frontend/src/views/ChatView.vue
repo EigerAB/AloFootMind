@@ -74,7 +74,7 @@
                     </span>
                   </div>
                   <button
-                    @click="() => { msg.thinking!.collapsed = !msg.thinking!.collapsed; autoScroll.value = false }"
+                    @click="() => { msg.thinking!.collapsed = !msg.thinking!.collapsed; autoScroll = false }"
                     class="text-xs text-gray-600 hover:text-gray-400 transition-colors px-1"
                   >{{ msg.thinking.collapsed ? '▼' : '▲' }}</button>
                 </div>
@@ -594,8 +594,6 @@ async function sendMessage(text?: string) {
   if (!planResult) return
   streamAbort.value = null
 
-  const assistantMsg = messages.value[assistantIdx]
-
   // ─── Step 2: Stream answer (SSE) ───
   isStreaming.value = true
 
@@ -606,9 +604,9 @@ async function sendMessage(text?: string) {
         session_id: currentSessionId,
         conversation_history: history,
         qa_meta: qaMeta.value,
-        rag_context: planResult.rag_context,
-        step_log: planResult.step_log,
-        route: planResult.analysis_result._route,
+        rag_context: (planResult as PlanResponse).rag_context,
+        step_log: (planResult as PlanResponse).step_log,
+        route: (planResult as PlanResponse).analysis_result._route,
       },
       {
         onToken: (token: string) => {
