@@ -141,10 +141,10 @@ export default {
     yes: 'Yes',
     no: 'No',
     suggestions: [
-      'What was the top-scoring match?',
-      "Describe Barcelona's pressing tactics",
-      'Who scored the most goals in the dataset?',
-      'Compare Liverpool and Manchester City\'s formations',
+      'Predict the result of Bayern vs Leverkusen',
+      "Explain England's characteristics in different ball possession zones",
+      "What are the key features of Leverkusen's formation?",
+      'Compare Rodri and Bellingham — their styles and differences',
     ],
   },
   toast: {
