@@ -29,76 +29,8 @@ _ENTITY_DICT: dict[str, dict] = {}
 # e.g. {"勒沃库森": {"id": 904, "type": "team"}, ...}
 
 
-# Common Chinese player name → English name as stored in DB
-_PLAYER_ALIASES: dict[str, str] = {
-    "凯恩": "Harry Kane",
-    "穆勒": "Thomas Müller",
-    "穆西亚拉": "Jamal Musiala",
-    "格雷茨卡": "Leon Goretzka",
-    "基米希": "Joshua Kimmich",
-    "诺伊尔": "Manuel Neuer",
-    "萨内": "Leroy Sané",
-    "科曼": "Kingsley Coman",
-    "格纳布里": "Serge Gnabry",
-    "帕利尼亚": "João Palhinha",
-    "格拉内罗": "Granit Xhaka",
-    "赫拉特": "Granit Xhaka",
-    "沙卡": "Bukayo Saka",
-    "特尔": "Florian Wirtz",
-    "维尔茨": "Florian Wirtz",
-    "格里马尔多": "Alejandro Grimaldo",
-    "齐默尔曼": "Lukas Hradecky",
-    "本塞拜尼": "Granit Xhaka",
-    "多亚克": "Patrik Schick",
-    "霍夫曼": "Jonas Hofmann",
-    "安德里奇": "Robert Andrich",
-    "塔": "Edmond Tapsoba",
-    "克拉默": "Florian Kramer",
-    "哈弗茨": "Kai Havertz",
-    "克罗斯": "Toni Kroos",
-    "京多安": "İlkay Gündoğan",
-    "胡梅尔斯": "Mats Hummels",
-    "布兰特": "Julian Brandt",
-    "罗伊斯": "Marco Reus",
-    "萨拉比亚": "Pablo Sarabia",
-    "亚马尔": "Lamine Yamal",
-    "佩德里": "Pedri",
-    "科利亚西亚斯": "Alejandro Balde",
-    "费兰托雷斯": "Ferran Torres",
-    "莫拉塔": "Álvaro Morata",
-    "罗德里": "Rodri",
-    "法比安": "Fabián Ruiz",
-    "卡瓦哈尔": "Dani Carvajal",
-    "纳乔": "Nacho",
-    "勒诺曼": "William Saliba",
-    "姆巴佩": "Kylian Mbappé",
-    "格列兹曼": "Antoine Griezmann",
-    "坎特": "N'Golo Kanté",
-    "图拉姆": "Marcus Thuram",
-    "吉鲁": "Olivier Giroud",
-    "帕瓦尔": "Benjamin Pavard",
-    "科纳特": "Ibrahima Konaté",
-    "索勒": "Carlos Soler",
-    "奥利莫": "Nico Williams",
-}
-
-# Common Chinese team name abbreviations → canonical name suffix to match DB
-_TEAM_ALIASES: dict[str, str] = {
-    "拜仁": "拜仁慕尼黑",
-    "多特": "多特蒙德",
-    "门兴": "门兴格拉德巴赫",
-    "莱比锡": "莱比锡红牛",
-    "不莱梅": "云达不莱梅",
-    "沙尔克": "沙尔克04",
-    "柏林联": "柏林联合",
-    "海登海": "海登海姆",
-    "达姆": "达姆施塔特",
-    "霍芬": "霍芬海姆",
-}
-
-
 async def _load_entity_dictionary() -> dict[str, dict]:
-    """Load team & player names from PostgreSQL into memory cache."""
+    """Load team & player names from PostgreSQL into memory cache (no aliases)."""
     global _ENTITY_DICT
     if _ENTITY_DICT:
         return _ENTITY_DICT
@@ -106,34 +38,17 @@ async def _load_entity_dictionary() -> dict[str, dict]:
     async with AsyncSessionLocal() as session:
         # Teams (Chinese names)
         team_result = await session.execute(text("SELECT team_id, team_name FROM teams"))
-        team_rows = list(team_result.mappings())
-        canonical: dict[str, dict] = {}
-        for row in team_rows:
+        for row in team_result.mappings():
             name = row["team_name"]
             if name:
-                entry = {"id": row["team_id"], "type": "team"}
-                _ENTITY_DICT[name] = entry
-                canonical[name] = entry
-
-        # Register team aliases: "拜仁" → same entry as "拜仁慕尼黑"
-        for alias, full_name in _TEAM_ALIASES.items():
-            if full_name in canonical and alias not in _ENTITY_DICT:
-                _ENTITY_DICT[alias] = canonical[full_name]
+                _ENTITY_DICT[name] = {"id": row["team_id"], "type": "team"}
 
         # Players (English names from DB)
         player_result = await session.execute(text("SELECT player_id, player_name FROM players"))
-        player_canonical: dict[str, dict] = {}
         for row in player_result.mappings():
             name = row["player_name"]
             if name:
-                entry = {"id": row["player_id"], "type": "player"}
-                _ENTITY_DICT[name] = entry
-                player_canonical[name] = entry
-
-        # Register player aliases: "凯恩" → same entry as "Harry Kane"
-        for alias, full_name in _PLAYER_ALIASES.items():
-            if full_name in player_canonical and alias not in _ENTITY_DICT:
-                _ENTITY_DICT[alias] = player_canonical[full_name]
+                _ENTITY_DICT[name] = {"id": row["player_id"], "type": "player"}
 
     logger.info("Loaded %d entities into QA dictionary", len(_ENTITY_DICT))
     return _ENTITY_DICT
@@ -275,7 +190,21 @@ async def relevance_gate(state: AnalysisState) -> dict:
         levels = classify_query(query)
         has_football_keywords = bool(levels and levels != ["tactical_level"])
 
-        if entities or has_football_keywords:
+        # Detect data-scope queries: user asking what data/corpus the AI has
+        _DATA_SCOPE_PATTERNS = [
+            "掌握了哪些", "掌握哪些", "有哪些数据", "有什么数据", "有哪些语料", "有什么语料",
+            "有哪些资料", "什么资料", "数据范围", "数据边界", "数据覆盖", "覆盖哪些",
+            "知道哪些", "了解哪些赛事", "了解哪些联赛", "支持哪些", "支持什么联赛",
+            "你的数据", "你有什么", "你有哪些", "你能分析哪", "你能查哪",
+            "what data", "what leagues", "what competitions", "data coverage",
+            "data range", "data scope", "which leagues", "which seasons",
+        ]
+        is_data_scope_query = any(p in query.lower() for p in _DATA_SCOPE_PATTERNS)
+
+        if is_data_scope_query:
+            route = "boundary_answer"
+            # Don't increment generic counter for data-scope queries
+        elif entities or has_football_keywords:
             football_intent_count += 1
             generic_turn_count = 0
             route = "classify"
@@ -304,94 +233,263 @@ async def relevance_gate(state: AnalysisState) -> dict:
         return {"step_log": step_log, "error": str(e)}
 
 
+async def _fetch_player_candidates(query: str) -> list[dict]:
+    """Fuzzy-search players in DB whose name appears relevant to the query keywords.
+    Returns at most 8 candidates as {player_id, player_name} dicts.
+    """
+    _STOPWORDS = {"the", "and", "for", "are", "was", "were", "has", "have", "with", "that",
+                  "this", "from", "their", "about", "between", "compare", "playing", "styles",
+                  "differences", "characteristics", "features"}
+    # Extract meaningful English words (≥4 chars, not stopwords)
+    english_words = [w for w in re.findall(r'[A-Za-z]{4,}', query) if w.lower() not in _STOPWORDS]
+    # Extract Chinese 3-char n-grams to match partial player names like "亚马尔", "姆巴佩"
+    chinese_text = "".join(re.findall(r'[\u4e00-\u9fff]+', query))
+    chinese_ngrams: list[str] = list(dict.fromkeys(
+        chinese_text[i:i + 3] for i in range(len(chinese_text) - 2)
+    ))
+    # Prioritise Chinese ngrams first so they are not cut off by the limit
+    words = list(dict.fromkeys(chinese_ngrams + english_words))[:20]
+    if not words:
+        return []
+    async with AsyncSessionLocal() as session:
+        conditions = " OR ".join([f"player_name ILIKE :w{i}" for i, _ in enumerate(words)])
+        params = {f"w{i}": f"%{w}%" for i, w in enumerate(words)}
+        result = await session.execute(
+            text(f"SELECT player_id, player_name FROM players WHERE {conditions} LIMIT 8"),
+            params,
+        )
+        return [{"player_id": row["player_id"], "player_name": row["player_name"]}
+                for row in result.mappings()]
+
+
+async def rag_plan(state: AnalysisState) -> dict:
+    """LLM agent node: decide which collections to query, with which ID filters and top_k.
+    Outputs a structured JSON plan stored in analysis_result['rag_plan'].
+    Falls back to empty plan (rag_retrieval will use rule-based logic) on any error.
+    """
+    node = "rag_plan"
+    try:
+        step_log = await push_step(state, node, "started", "Planning retrieval strategy...")
+
+        ar = state.get("analysis_result") or {}
+        original_query = state.get("query") or ""
+        rewritten_query = ar.get("rewritten_query") or original_query
+        levels = ar.get("query_levels", [])
+
+        # Build team candidates list from cached entity dict (deduplicated by id)
+        await _load_entity_dictionary()
+        seen_team_ids: set = set()
+        unique_teams: list[str] = []
+        for k, v in _ENTITY_DICT.items():
+            if v["type"] == "team" and v["id"] not in seen_team_ids:
+                seen_team_ids.add(v["id"])
+                unique_teams.append(f"  - id={v['id']}, name={k}")
+        team_list_str = "\n".join(unique_teams[:60])
+
+        # Fetch player candidates via DB fuzzy search
+        player_candidates = await _fetch_player_candidates(original_query + " " + rewritten_query)
+        player_list_str = "\n".join(
+            f"  - id={p['player_id']}, name={p['player_name']}" for p in player_candidates
+        ) or "  (none found)"
+
+        prompt = f"""You are a football knowledge base retrieval planner.
+
+User query: "{original_query}"
+Normalized query: "{rewritten_query}"
+Pre-classified levels: {levels}
+
+Available collections:
+- team_tactical_profiles: aggregated tactical style per team (use when asking about a team's tactics, style, strengths)
+- tactical_segments: match-level tactical clips (use when asking about specific match tactics or events)
+- player_profiles: per-player stats and characteristics (use when asking about specific players)
+- match_summaries: full match summary (use when asking about match results, scores, overview)
+
+Available teams in database:
+{team_list_str}
+
+Available players matching this query:
+{player_list_str}
+
+Task: Output a JSON retrieval plan. For each collection to query, specify:
+- "collection": one of the 4 collection names above
+- "team_ids": list of team IDs to filter by, or null for no filter
+- "player_ids": list of player IDs to filter by, or null
+- "top_k": number of results to fetch (3-20)
+
+Rules:
+1. If the query mentions specific teams by name, use their IDs to filter team_tactical_profiles — one entry per team, top_k=3
+2. If the query mentions specific players by name AND they appear in the "Available players" list, create ONE player_profiles entry PER player with only that player's ID and top_k=3 — do NOT combine multiple players into one entry
+3. Only use player IDs from the "Available players" list above — never invent IDs
+4. If the query asks about players in general (e.g. "outstanding forwards", "top scorers") but no specific player is matched, add ONE player_profiles entry with player_ids=null and top_k=10; if the query also mentions a specific team, combine with that team's team_ids filter
+5. Add tactical_segments or match_summaries only if the query is about specific matches or tactical clips
+6. Do NOT add a collection if it is irrelevant to the query
+
+Output ONLY valid JSON, no explanation:
+{{"retrievals": [...]}}"""
+
+        llm = get_deepseek_llm(temperature=0, max_tokens=400, request_timeout=20)
+        resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=prompt)]), timeout=20.0)
+        raw = resp.content.strip()
+
+        # Extract JSON from response (handle possible markdown code fences)
+        json_match = re.search(r'\{.*\}', raw, re.DOTALL)
+        plan: list[dict] = []
+        if json_match:
+            import json as _json
+            try:
+                parsed = _json.loads(json_match.group())
+                plan = parsed.get("retrievals", [])
+            except Exception:
+                pass
+
+        summary_parts = []
+        for r in plan:
+            col = r.get("collection", "?")
+            tids = r.get("team_ids")
+            pids = r.get("player_ids")
+            k = r.get("top_k", "?")
+            if tids:
+                summary_parts.append(f"{col}(teams={tids},k={k})")
+            elif pids:
+                summary_parts.append(f"{col}(players={pids},k={k})")
+            else:
+                summary_parts.append(f"{col}(k={k})")
+
+        summary = "Plan: " + ", ".join(summary_parts) if summary_parts else "No plan generated, using fallback"
+        step_log = await push_step(state, node, "completed", summary, data={"plan": plan})
+
+        existing = dict(ar)
+        existing["rag_plan"] = plan
+        return {"step_log": step_log, "analysis_result": existing}
+
+    except Exception as e:
+        logger.warning("rag_plan failed: %s, falling back to rule-based retrieval", e)
+        step_log = await push_step(state, node, "completed", f"Fallback: {str(e)[:60]}")
+        existing = dict(state.get("analysis_result") or {})
+        existing["rag_plan"] = []
+        return {"step_log": step_log, "analysis_result": existing}
+
+
+COLLECTION_LEVEL_MAP = {
+    "team_tactical_profiles": "team_tactical_level",
+    "tactical_segments": "tactical_level",
+    "player_profiles": "player_level",
+    "match_summaries": "match_level",
+}
+
+
 async def rag_retrieval(state: AnalysisState) -> dict:
     node = "rag_retrieval"
     try:
         step_log = await push_step(state, node, "started", "Searching knowledge base...")
 
         ar = state.get("analysis_result") or {}
-        levels = ar.get("query_levels", ["tactical_level"])
-        # Expand match-level queries to also retrieve tactical data
-        if "match_level" in levels:
-            if "tactical_level" not in levels:
-                levels = levels + ["tactical_level"]
-            if "team_tactical_level" not in levels:
-                levels = levels + ["team_tactical_level"]
-        # Use rewritten (bilingual) query if available
         query = ar.get("rewritten_query") or state.get("query") or ""
+        plan: list[dict] = ar.get("rag_plan", [])
 
-        # Extract entity filters from matched entities
-        entities = ar.get("extracted_entities", [])
-        team_ids_in_query = [e["id"] for e in entities if e["type"] == "team"]
-        player_ids_in_query = [e["id"] for e in entities if e["type"] == "player"]
-        team_id_filter = team_ids_in_query[0] if len(team_ids_in_query) == 1 else None
+        # ── Path A: execute rag_plan if provided and non-empty ──────────────────
+        if plan:
+            all_results: list[dict] = []
+            seen_texts: set[str] = set()
+            for item in plan:
+                col = item.get("collection", "")
+                level = COLLECTION_LEVEL_MAP.get(col)
+                if not level:
+                    continue
+                team_ids = item.get("team_ids") or []
+                player_ids = item.get("player_ids") or []
+                top_k = int(item.get("top_k", 3))
 
-        # For multi-player queries: retrieve player_profiles separately per player
-        # so each player gets equal representation
-        if len(player_ids_in_query) > 1 and "player_level" in levels:
-            other_levels = [l for l in levels if l != "player_level"]
-            per_player_results: list[dict] = []
-            for pid in player_ids_in_query:
-                player_hits = await retrieve(
-                    query=query,
-                    top_k=2,
-                    player_ids=[pid],
-                    force_levels=["player_level"],
-                    score_threshold=None,
-                )
-                per_player_results.extend(player_hits)
-            other_results = await retrieve(
-                query=query,
-                top_k=10,
-                team_id=team_id_filter,
-                force_levels=other_levels if other_levels else ["tactical_level"],
-                score_threshold=None,
-            ) if other_levels else []
-            seen_texts: set[str] = {r["text"] for r in per_player_results}
-            deduped_other = [r for r in other_results if r["text"] not in seen_texts]
-            results = per_player_results + deduped_other
+                if team_ids:
+                    for tid in team_ids:
+                        hits = await retrieve(
+                            query=query,
+                            top_k=top_k,
+                            team_id=tid,
+                            force_levels=[level],
+                            score_threshold=None,
+                        )
+                        for h in hits:
+                            if h["text"] not in seen_texts:
+                                seen_texts.add(h["text"])
+                                all_results.append(h)
+                elif player_ids:
+                    for pid in player_ids:
+                        hits = await retrieve(
+                            query=query,
+                            top_k=top_k,
+                            player_ids=[pid],
+                            force_levels=[level],
+                            score_threshold=None,
+                        )
+                        for h in hits:
+                            if h["text"] not in seen_texts:
+                                seen_texts.add(h["text"])
+                                all_results.append(h)
+                else:
+                    hits = await retrieve(
+                        query=query,
+                        top_k=top_k,
+                        force_levels=[level],
+                        score_threshold=None,
+                    )
+                    for h in hits:
+                        if h["text"] not in seen_texts:
+                            seen_texts.add(h["text"])
+                            all_results.append(h)
+            results = all_results
 
-        # For multi-team queries: retrieve team_tactical_profiles separately per team
-        # so each team gets equal representation, then retrieve other levels normally
-        elif len(team_ids_in_query) > 1 and "team_tactical_level" in levels:
-            other_levels = [l for l in levels if l != "team_tactical_level"]
-            per_team_results: list[dict] = []
-            for tid in team_ids_in_query:
-                team_hits = await retrieve(
-                    query=query,
-                    top_k=3,
-                    team_id=tid,
-                    force_levels=["team_tactical_level"],
-                    score_threshold=None,
-                )
-                per_team_results.extend(team_hits)
-            other_results = await retrieve(
-                query=query,
-                top_k=10,
-                team_id=None,
-                force_levels=other_levels if other_levels else ["tactical_level"],
-                score_threshold=None,
-            ) if other_levels else []
-            seen_texts = {r["text"] for r in per_team_results}
-            deduped_other = [r for r in other_results if r["text"] not in seen_texts]
-            results = per_team_results + deduped_other
-
+        # ── Path B: rule-based fallback (no rag_plan) ───────────────────────────
         else:
-            results = await retrieve(
-                query=query,
-                top_k=10,
-                team_id=team_id_filter,
-                player_ids=player_ids_in_query if player_ids_in_query else None,
-                force_levels=levels,
-                score_threshold=None,
-            )
+            levels = ar.get("query_levels", ["tactical_level"])
+            if "match_level" in levels:
+                if "tactical_level" not in levels:
+                    levels = levels + ["tactical_level"]
+                if "team_tactical_level" not in levels:
+                    levels = levels + ["team_tactical_level"]
+
+            entities = ar.get("extracted_entities", [])
+            team_ids_in_query = [e["id"] for e in entities if e["type"] == "team"]
+            player_ids_in_query = [e["id"] for e in entities if e["type"] == "player"]
+            team_id_filter = team_ids_in_query[0] if len(team_ids_in_query) == 1 else None
+
+            if len(player_ids_in_query) > 1 and "player_level" in levels:
+                other_levels = [l for l in levels if l != "player_level"]
+                per_player: list[dict] = []
+                for pid in player_ids_in_query:
+                    per_player.extend(await retrieve(query=query, top_k=2, player_ids=[pid],
+                                                     force_levels=["player_level"], score_threshold=None))
+                other = await retrieve(query=query, top_k=10, team_id=team_id_filter,
+                                       force_levels=other_levels or ["tactical_level"],
+                                       score_threshold=None) if other_levels else []
+                seen = {r["text"] for r in per_player}
+                results = per_player + [r for r in other if r["text"] not in seen]
+
+            elif len(team_ids_in_query) > 1 and "team_tactical_level" in levels:
+                other_levels = [l for l in levels if l != "team_tactical_level"]
+                per_team: list[dict] = []
+                for tid in team_ids_in_query:
+                    per_team.extend(await retrieve(query=query, top_k=3, team_id=tid,
+                                                   force_levels=["team_tactical_level"], score_threshold=None))
+                other = await retrieve(query=query, top_k=10, team_id=None,
+                                       force_levels=other_levels or ["tactical_level"],
+                                       score_threshold=None) if other_levels else []
+                seen = {r["text"] for r in per_team}
+                results = per_team + [r for r in other if r["text"] not in seen]
+
+            else:
+                results = await retrieve(
+                    query=query, top_k=10, team_id=team_id_filter,
+                    player_ids=player_ids_in_query if player_ids_in_query else None,
+                    force_levels=levels, score_threshold=None,
+                )
 
         if not results:
             step_log = await push_step(state, node, "completed", "No matching documents found.")
         else:
             step_log = await push_step(
                 state, node, "completed",
-                f"Retrieved {len(results)} relevant documents (team_id_filter={team_id_filter})."
+                f"Retrieved {len(results)} relevant documents."
             )
         return {"step_log": step_log, "rag_context": results}
 
@@ -422,8 +520,47 @@ async def stream_boundary_answer(
 
     name_prefix = f"{user_name}，" if user_name and lang == "zh" else ""
 
+    # Detect if this is an explicit data-scope query
+    _DATA_SCOPE_PATTERNS = [
+        "掌握了哪些", "掌握哪些", "有哪些数据", "有什么数据", "有哪些语料", "有什么语料",
+        "有哪些资料", "什么资料", "数据范围", "数据边界", "数据覆盖", "覆盖哪些",
+        "知道哪些", "了解哪些赛事", "了解哪些联赛", "支持哪些", "支持什么联赛",
+        "你的数据", "你有什么", "你有哪些", "你能分析哪", "你能查哪",
+        "what data", "what leagues", "what competitions", "data coverage",
+        "data range", "data scope", "which leagues", "which seasons",
+    ]
+    is_data_scope_query = any(p in query.lower() for p in _DATA_SCOPE_PATTERNS)
+
     if lang == "zh":
-        system_prompt = f"""你是 AloFootMind，一位足球数据分析专家。
+        if is_data_scope_query:
+            system_prompt = f"""你是 AloFootMind，一位足球数据分析专家。
+用户想了解你掌握的数据范围，请准确、清晰地说明以下数据边界，不要编造或夸大。
+
+## 你的数据边界（严格按此回答）
+
+**赛事覆盖：**
+- 2023/2024 赛季 男子德甲联赛（Bundesliga，第1轮至第34轮）
+- 2024 年 欧洲杯（UEFA Euro 2024，小组赛至决赛）
+
+**数据类型：**
+- 比赛事件数据：进球、助攻、射门、传球、抢断、犯规、黄/红牌等逐场记录
+- 阵容与出场：每场比赛的首发/替补、上下场时间
+- 球员档案：基本信息、赛季累计数据（进球/助攻/出场次数/预期进球 xG 等）
+- 球队风格标签：控球率、高位压迫、防守体系等战术特征
+
+**不在数据范围内：**
+- 其他联赛（英超、西甲、意甲、法甲、冠军联赛等）
+- 2023/2024 赛季以外的历史数据
+- 实时/最新赛事数据（数据截至 2024 年欧洲杯决赛）
+- 转会市场、合同、薪资等商业数据
+
+回复要求：
+1. 先清晰列出数据边界
+2. 再给出 2-3 个可以回答的示例问题
+3. 语气简洁专业
+4. 用中文回复"""
+        else:
+            system_prompt = f"""你是 AloFootMind，一位足球数据分析专家。
 {name_prefix}你目前连续多轮没有提出足球相关的问题。
 请礼貌地告知用户你的专长范围，并给出示例问题引导用户回到足球主题。
 
@@ -438,7 +575,31 @@ async def stream_boundary_answer(
 4. 语气友好专业
 5. 如果用户用中文提问，用中文回复"""
     else:
-        system_prompt = """You are AloFootMind, a football data analysis expert.
+        if is_data_scope_query:
+            system_prompt = """You are AloFootMind, a football data analysis expert.
+The user wants to know exactly what data you have. Answer precisely based on the following scope only — do not fabricate or exaggerate.
+
+## Your Data Scope
+
+**Competitions covered:**
+- 2023/2024 Bundesliga (all 34 matchdays)
+- UEFA Euro 2024 (group stage through final)
+
+**Data types available:**
+- Match events: goals, assists, shots, passes, tackles, fouls, cards — per match
+- Lineups: starters, substitutes, and timing
+- Player profiles: career stats, season totals (goals/assists/xG/appearances)
+- Team style tags: possession, high press, defensive shape, etc.
+
+**NOT in scope:**
+- Other leagues (Premier League, La Liga, Serie A, Champions League, etc.)
+- Seasons other than 2023/2024 / Euro 2024
+- Real-time or post-Euro 2024 data
+- Transfer market, contracts, or salary data
+
+Give 2-3 example questions you can answer at the end."""
+        else:
+            system_prompt = """You are AloFootMind, a football data analysis expert.
 The user has been chatting without football-related questions for several turns.
 Politely inform them of your scope and give example questions to guide them back.
 
@@ -612,6 +773,7 @@ def build_qa_graph() -> StateGraph:
     graph.add_node("query_rewrite", query_rewrite)
     graph.add_node("relevance_gate", relevance_gate)
     graph.add_node("query_classify", query_classify)
+    graph.add_node("rag_plan", rag_plan)
     graph.add_node("rag_retrieval", rag_retrieval)
 
     graph.set_entry_point("query_rewrite")
@@ -625,7 +787,8 @@ def build_qa_graph() -> StateGraph:
             "direct_answer": END,
         },
     )
-    graph.add_edge("query_classify", "rag_retrieval")
+    graph.add_edge("query_classify", "rag_plan")
+    graph.add_edge("rag_plan", "rag_retrieval")
     graph.add_edge("rag_retrieval", END)
 
     return graph.compile()

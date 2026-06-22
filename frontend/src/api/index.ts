@@ -1,5 +1,12 @@
 const BASE_URL = ''
 
+interface SseStreamOptions {
+  onToken?: (token: string) => void
+  onStep?: (step: Record<string, unknown>) => void
+  onDone: (data: Record<string, unknown>) => void
+  onError: (err: string) => void
+}
+
 const TRIAL_EXPIRED_MSG = 'Trial account has expired'
 
 function _clearAuthAndRedirect() {
@@ -196,10 +203,162 @@ export const api = {
   deleteChatSession: (id: number) =>
     request<{ message: string }>(`/api/chat/sessions/${id}`, { method: 'DELETE' }),
 
-  loadChatSession: (id: number) =>
-    request<{ id: number; name: string; messages: ChatMessage[]; qa_meta: QaMeta }>(
-      `/api/chat/sessions/${id}`
-    ).catch(() => null),
+  loadChatSession: (id: number, offset?: number, limit?: number) => {
+    const params = new URLSearchParams()
+    if (offset !== undefined) params.set('offset', String(offset))
+    if (limit !== undefined) params.set('limit', String(limit))
+    const qs = params.toString()
+    return request<{ id: number; name: string; messages: ChatMessage[]; total: number; qa_meta: QaMeta }>(
+      `/api/chat/sessions/${id}${qs ? `?${qs}` : ''}`
+    ).catch(() => null)
+  },
+
+  // Chat plan + stream (new two-step flow)
+  planChat: (body: {
+    query: string
+    session_id?: number | null
+    conversation_history?: { role: string; content: string }[]
+    qa_meta?: QaMeta
+  }) =>
+    request<PlanResponse>('/api/chat/plan', { method: 'POST', body: JSON.stringify(body) }),
+
+  planChatStream: (
+    body: {
+      query: string
+      session_id?: number | null
+      conversation_history?: { role: string; content: string }[]
+      qa_meta?: QaMeta
+    },
+    options: SseStreamOptions
+  ) => {
+    const abortController = new AbortController()
+    const url = `${BASE_URL}/api/chat/plan/stream`
+    const promise = (async () => {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          signal: abortController.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'text/event-stream',
+            ...getAuthHeader(),
+          },
+          body: JSON.stringify(body),
+        })
+        if (!res.ok) {
+          const text = await res.text().catch(() => 'Request failed')
+          options.onError(text || `HTTP ${res.status}`)
+          return
+        }
+        const reader = res.body?.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        if (!reader) { options.onError('No response body'); return }
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const events = buffer.split('\n\n')
+          buffer = events.pop() ?? ''
+          for (const raw of events) {
+            if (!raw.trim()) continue
+            const lines = raw.split('\n')
+            let eventType = 'message'
+            let dataLine = ''
+            for (const line of lines) {
+              if (line.startsWith('event: ')) eventType = line.slice(7).trim()
+              if (line.startsWith('data: ')) dataLine = line.slice(6).trim()
+            }
+            if (!dataLine) continue
+            try {
+              const parsed = JSON.parse(dataLine)
+              if (eventType === 'step' && options.onStep) {
+                options.onStep(parsed)
+              } else if (eventType === 'done') {
+                options.onDone(parsed)
+              } else if (eventType === 'error') {
+                options.onError(parsed.error ?? 'Unknown error')
+              }
+            } catch { /* ignore parse errors */ }
+          }
+        }
+      } catch (err: unknown) {
+        if ((err as Error)?.name !== 'AbortError') {
+          options.onError(String(err))
+        }
+      }
+    })()
+    return { promise, abort: () => abortController.abort() }
+  },
+
+  streamChat: (
+    body: {
+      query: string
+      session_id?: number | null
+      conversation_history?: { role: string; content: string }[]
+      qa_meta?: QaMeta
+      rag_context?: RagHit[]
+      step_log?: StepEntry[]
+      route?: string
+    },
+    options: SseStreamOptions
+  ) => {
+    const abortController = new AbortController()
+    const url = `${BASE_URL}/api/chat/stream`
+    const promise = (async () => {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          signal: abortController.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'text/event-stream',
+            ...getAuthHeader(),
+          },
+          body: JSON.stringify(body),
+        })
+        if (!res.ok) {
+          const text = await res.text().catch(() => 'Request failed')
+          options.onError(text || `HTTP ${res.status}`)
+          return
+        }
+        // Read SSE stream
+        const reader = res.body?.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        if (!reader) {
+          options.onError('No response body')
+          return
+        }
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6)
+              try {
+                const parsed = JSON.parse(data)
+                if (parsed.token) options.onToken(parsed.token)
+                if (parsed.sources || parsed.qa_meta || parsed.session_id !== undefined) {
+                  options.onDone(parsed)
+                }
+              } catch {
+                // ignore parse errors
+              }
+            }
+          }
+        }
+      } catch (err: unknown) {
+        if ((err as Error)?.name !== 'AbortError') {
+          options.onError(String(err))
+        }
+      }
+    })()
+    return { promise, abort: () => abortController.abort() }
+  },
 
   // Auth
   register: (body: { email: string; password: string; nickname: string }) =>
@@ -292,11 +451,41 @@ export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   sources?: { text: string; collection: string; score?: number }[]
+  thinking?: {
+    steps: StepEntry[]
+    rag_context: RagHit[]
+  }
 }
 
 export interface QaMeta {
   football_intent_count: number
   generic_turn_count: number
+}
+
+export interface RagHit {
+  text: string
+  collection: string
+  score: number
+}
+
+export interface PlanResponse {
+  step_log: StepEntry[]
+  rag_context: RagHit[]
+  analysis_result: {
+    _route: string
+    rewritten_query: string
+    query_levels: string[]
+    rag_plan: any[]
+    qa_meta: QaMeta
+  }
+  session_id: number | null
+}
+
+export interface StepEntry {
+  node_name: string
+  status: 'started' | 'completed' | 'failed'
+  summary: string
+  data?: any
 }
 
 export interface ChatSession {

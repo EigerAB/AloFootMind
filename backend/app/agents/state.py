@@ -9,6 +9,11 @@ from typing_extensions import TypedDict
 from langgraph.graph.message import add_messages
 
 
+def _append_steps(left: list, right: list) -> list:
+    """Reducer: accumulate step_log entries across nodes."""
+    return (left or []) + (right or [])
+
+
 class StepLogEntry(TypedDict, total=False):
     node_name: str
     status: Literal["started", "completed", "error"]
@@ -32,7 +37,7 @@ class AnalysisState(TypedDict):
     rag_context: list[dict]
     analysis_result: dict | None
     report_markdown: str | None
-    step_log: list[StepLogEntry]
+    step_log: Annotated[list[StepLogEntry], _append_steps]
     error: str | None
     language: str
     user_id: int | None

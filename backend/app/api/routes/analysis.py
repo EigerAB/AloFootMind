@@ -44,6 +44,16 @@ class ChatRequest(BaseModel):
     qa_meta: dict | None = None  # football_intent_count, generic_turn_count
 
 
+class ChatStreamRequest(BaseModel):
+    query: str
+    session_id: int | None = None
+    conversation_history: list[dict] | None = None
+    qa_meta: dict | None = None
+    rag_context: list[dict] | None = None
+    step_log: list[dict] | None = None
+    route: str = "classify"
+
+
 class CreateSessionRequest(BaseModel):
     name: str | None = None
     initial_message: str | None = None
@@ -303,6 +313,11 @@ async def chat(
         full_response = ""
         sources = []
         try:
+            # Emit agent step_log entries before token stream so frontend can show Thinking panel
+            for entry in result.get("step_log", []):
+                yield f"event: step\ndata: {json.dumps(entry, ensure_ascii=False, default=str)}\n\n"
+                await asyncio.sleep(0)
+
             if route == "classify":
                 rag_context = result.get("rag_context", [])
                 async for token in stream_answer(query, rag_context, history, language="zh"):
@@ -379,6 +394,325 @@ async def chat(
     )
 
 
+@router.post("/chat/plan")
+async def chat_plan(
+    body: ChatRequest,
+    user: User = Depends(require_role("trial", "full")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Sync endpoint: run the QA graph (query → rewrite → classify → rag_plan → rag_retrieval).
+    Returns step_log, rag_context, and analysis_result.  No LLM answer generation."""
+    query = body.query.strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="Query cannot be empty")
+
+    session_id = body.session_id
+    history: list[dict] = []
+    qa_meta = {"football_intent_count": 0, "generic_turn_count": 0}
+
+    if session_id:
+        result = await db.execute(
+            text("SELECT id, messages, qa_meta FROM chat_sessions WHERE id = :sid AND user_id = :uid"),
+            {"sid": session_id, "uid": user.id},
+        )
+        row = result.mappings().first()
+        if row:
+            history = list(row["messages"])
+            qa_meta = dict(row["qa_meta"])
+        else:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+    if not history and body.conversation_history:
+        history = list(body.conversation_history)
+
+    if body.qa_meta:
+        qa_meta = body.qa_meta
+
+    history.append({"role": "user", "content": query})
+
+    state: AnalysisState = {
+        "task_id": f"chat-plan-{uuid.uuid4().hex[:8]}",
+        "request_type": "qa",
+        "match_id": None,
+        "team_ids": None,
+        "query": query,
+        "conversation_history": history,
+        "raw_events": None,
+        "rag_context": [],
+        "analysis_result": {"qa_meta": qa_meta},
+        "report_markdown": None,
+        "step_log": [],
+        "error": None,
+        "language": "zh",
+        "user_id": user.id,
+    }
+
+    graph = build_qa_graph()
+    try:
+        result = await asyncio.wait_for(graph.ainvoke(state), timeout=30.0)
+    except asyncio.TimeoutError:
+        logger.warning("[chat_plan] graph.ainvoke timed out for query: %s", query[:80])
+        result = {}
+
+    ar = result.get("analysis_result", {})
+    updated_qa_meta = ar.get("qa_meta", qa_meta)
+
+    # We do NOT save session here — /chat/stream will do it.
+    return {
+        "step_log": result.get("step_log", []),
+        "rag_context": [
+            {"text": r["text"], "collection": r.get("collection", ""), "score": r.get("score", 0)}
+            for r in result.get("rag_context", [])
+        ],
+        "analysis_result": {
+            "_route": ar.get("_route", "classify"),
+            "rewritten_query": ar.get("rewritten_query", ""),
+            "query_levels": ar.get("query_levels", []),
+            "rag_plan": ar.get("rag_plan", []),
+            "qa_meta": updated_qa_meta,
+        },
+        "session_id": session_id,
+    }
+
+
+@router.post("/chat/plan/stream")
+async def chat_plan_stream(
+    body: ChatRequest,
+    user: User = Depends(require_role("trial", "full")),
+    db: AsyncSession = Depends(get_db),
+):
+    """SSE endpoint: run QA graph and stream step events as each node completes.
+    Emits 'event: step' for each completed step, then 'event: done' with full plan result."""
+    query = body.query.strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="Query cannot be empty")
+
+    session_id = body.session_id
+    history: list[dict] = []
+    qa_meta = {"football_intent_count": 0, "generic_turn_count": 0}
+
+    if session_id:
+        result = await db.execute(
+            text("SELECT id, messages, qa_meta FROM chat_sessions WHERE id = :sid AND user_id = :uid"),
+            {"sid": session_id, "uid": user.id},
+        )
+        row = result.mappings().first()
+        if row:
+            history = list(row["messages"])
+            qa_meta = dict(row["qa_meta"])
+        else:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+    if not history and body.conversation_history:
+        history = list(body.conversation_history)
+
+    if body.qa_meta:
+        qa_meta = body.qa_meta
+
+    history.append({"role": "user", "content": query})
+
+    state: AnalysisState = {
+        "task_id": f"chat-plan-{uuid.uuid4().hex[:8]}",
+        "request_type": "qa",
+        "match_id": None,
+        "team_ids": None,
+        "query": query,
+        "conversation_history": history,
+        "raw_events": None,
+        "rag_context": [],
+        "analysis_result": {"qa_meta": qa_meta},
+        "report_markdown": None,
+        "step_log": [],
+        "error": None,
+        "language": "zh",
+        "user_id": user.id,
+    }
+
+    async def _generate() -> AsyncGenerator[str, None]:
+        graph = build_qa_graph()
+        accumulated_steps: list[dict] = []
+        final_result: dict = {}
+
+        try:
+            async with asyncio.timeout(30.0):
+                async for chunk in graph.astream(state, stream_mode="updates"):
+                    for node_name, node_output in chunk.items():
+                        new_steps = node_output.get("step_log", [])
+                        for step in new_steps:
+                            if step not in accumulated_steps:
+                                accumulated_steps.append(step)
+                                yield (
+                                    f"event: step\n"
+                                    f"data: {json.dumps(step, ensure_ascii=False)}\n\n"
+                                )
+                        # Merge node output into final_result
+                        for k, v in node_output.items():
+                            if k == "step_log":
+                                continue
+                            if k == "analysis_result" and isinstance(v, dict):
+                                existing = final_result.get("analysis_result", {})
+                                final_result["analysis_result"] = {**existing, **v}
+                            elif k == "rag_context" and v:
+                                final_result["rag_context"] = v
+                            else:
+                                final_result[k] = v
+
+        except (asyncio.TimeoutError, TimeoutError):
+            logger.warning("[chat_plan_stream] graph timed out for query: %s", query[:80])
+
+        ar = final_result.get("analysis_result", {})
+        updated_qa_meta = ar.get("qa_meta", qa_meta)
+
+        done_payload = {
+            "step_log": accumulated_steps,
+            "rag_context": [
+                {"text": r["text"], "collection": r.get("collection", ""), "score": r.get("score", 0)}
+                for r in final_result.get("rag_context", [])
+            ],
+            "analysis_result": {
+                "_route": ar.get("_route", "classify"),
+                "rewritten_query": ar.get("rewritten_query", ""),
+                "query_levels": ar.get("query_levels", []),
+                "rag_plan": ar.get("rag_plan", []),
+                "qa_meta": updated_qa_meta,
+            },
+            "session_id": session_id,
+        }
+        yield (
+            f"event: done\n"
+            f"data: {json.dumps(done_payload, ensure_ascii=False)}\n\n"
+        )
+
+    return StreamingResponse(
+        _generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/chat/stream")
+async def chat_stream(
+    body: ChatStreamRequest,
+    user: User = Depends(require_role("trial", "full")),
+    db: AsyncSession = Depends(get_db),
+):
+    """SSE endpoint: stream LLM answer only.  Expects rag_context and route from /chat/plan."""
+    query = body.query.strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="Query cannot be empty")
+
+    session_id = body.session_id
+    history: list[dict] = []
+    qa_meta = {"football_intent_count": 0, "generic_turn_count": 0}
+
+    if session_id:
+        result = await db.execute(
+            text("SELECT id, messages, qa_meta FROM chat_sessions WHERE id = :sid AND user_id = :uid"),
+            {"sid": session_id, "uid": user.id},
+        )
+        row = result.mappings().first()
+        if row:
+            history = list(row["messages"])
+            qa_meta = dict(row["qa_meta"])
+        else:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+    if not history and body.conversation_history:
+        history = list(body.conversation_history)
+
+    if body.qa_meta:
+        qa_meta = body.qa_meta
+
+    history.append({"role": "user", "content": query})
+
+    route = body.route or "classify"
+    rag_context = body.rag_context or []
+    updated_qa_meta = body.qa_meta or qa_meta
+    session_id_holder = [session_id]
+
+    async def _generate():
+        full_response = ""
+        sources = [
+            {"text": r["text"], "collection": r.get("collection", ""), "score": r.get("score", 0)}
+            for r in rag_context[:5]
+        ]
+        try:
+            if route == "classify":
+                async for token in stream_answer(query, rag_context, history, language="zh"):
+                    full_response += token
+                    yield f"data: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
+            elif route == "direct_answer":
+                async for token in stream_direct_answer(query, history, language="zh"):
+                    full_response += token
+                    yield f"data: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
+            else:
+                async for token in stream_boundary_answer(query, history, language="zh"):
+                    full_response += token
+                    yield f"data: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
+
+            # Save session
+            from app.db.postgres import AsyncSessionLocal
+            async with AsyncSessionLocal() as save_db:
+                assistant_msg = {
+                    "role": "assistant",
+                    "content": full_response,
+                    "thinking": {
+                        "steps": body.step_log or [],
+                        "rag_context": rag_context,
+                    },
+                }
+                new_messages = history + [assistant_msg]
+                if session_id_holder[0]:
+                    await save_db.execute(
+                        text("""
+                            UPDATE chat_sessions
+                            SET messages = :msgs, qa_meta = :qam, updated_at = NOW()
+                            WHERE id = :sid AND user_id = :uid
+                        """),
+                        {
+                            "msgs": json.dumps(new_messages, ensure_ascii=False),
+                            "qam": json.dumps(updated_qa_meta, ensure_ascii=False),
+                            "sid": session_id_holder[0],
+                            "uid": user.id,
+                        },
+                    )
+                else:
+                    res = await save_db.execute(
+                        text("""
+                            INSERT INTO chat_sessions (user_id, name, messages, qa_meta)
+                            VALUES (:uid, :name, :msgs, :qam)
+                            RETURNING id
+                        """),
+                        {
+                            "uid": user.id,
+                            "name": query[:30],
+                            "msgs": json.dumps(new_messages, ensure_ascii=False),
+                            "qam": json.dumps(updated_qa_meta, ensure_ascii=False),
+                        },
+                    )
+                    new_id = res.scalar_one()
+                    session_id_holder[0] = new_id
+                await save_db.commit()
+
+            yield (
+                f"event: done\n"
+                f"data: {json.dumps({'sources': sources, 'qa_meta': updated_qa_meta, 'session_id': session_id_holder[0]}, ensure_ascii=False)}\n\n"
+            )
+        except GeneratorExit:
+            raise
+        except Exception as e:
+            yield (
+                f"event: error\n"
+                f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+            )
+
+    return StreamingResponse(
+        _generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @router.post("/chat/sessions")
 async def create_chat_session(
     body: CreateSessionRequest,
@@ -409,6 +743,8 @@ async def create_chat_session(
 @router.get("/chat/sessions/{session_id}")
 async def get_chat_session(
     session_id: int,
+    offset: int = 0,
+    limit: int = 0,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -424,10 +760,18 @@ async def get_chat_session(
     row = result.mappings().first()
     if not row:
         raise HTTPException(status_code=404, detail="Session not found")
+    all_msgs: list = list(row["messages"] or [])
+    total = len(all_msgs)
+    if limit > 0:
+        # offset counts from the start of the array; slice [offset : offset+limit]
+        page_msgs = all_msgs[offset: offset + limit]
+    else:
+        page_msgs = all_msgs
     return {
         "id": row["id"],
         "name": row["name"],
-        "messages": row["messages"],
+        "messages": page_msgs,
+        "total": total,
         "qa_meta": row["qa_meta"],
         "updated_at": str(row["updated_at"]),
     }
